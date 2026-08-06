@@ -1,0 +1,11 @@
+{
+    "domain": "stopfinder",
+    "name": "Stopfinder",
+    "codeowners": ["@steveredden"],
+    "config_flow": true,
+    "documentation": "https://github.com/steveredden/ha_stopfinder",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/steveredden/ha_stopfinder/issues",
+    "requirements": [],
+    "version": "1.0.0"
+}

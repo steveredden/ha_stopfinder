@@ -1,0 +1,86 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stopfinder – Sign In",
+        "description": "Enter your Stopfinder (Transfinder) account credentials.\n\n**Note:** This integration uses undocumented Transfinder mobile APIs that are not officially supported for third-party use and may change or break without notice.",
+        "data": {
+          "username": "Email Address",
+          "password": "Password",
+          "user_agent": "User Agent"
+        },
+        "data_description": {
+          "user_agent": "Optional custom User-Agent header sent to the Stopfinder API. Leave as default unless directed otherwise."
+        }
+      },
+      "preferences": {
+        "title": "Tracking Preferences",
+        "description": "Detected bus: **{bus_number}**\n\nConfigure polling and early-release thresholds. GPS is fetched only during the active tracking window.",
+        "data": {
+          "student_label": "Student Label",
+          "poll_interval": "Poll Interval",
+          "minutes_before": "Start Tracking Before Pickup",
+          "minutes_after": "Stop Tracking After Dropoff",
+          "halfday_hour": "Half-Day Threshold (hour)",
+          "early_hour": "Early Release Threshold (hour)"
+        },
+        "data_description": {
+          "student_label": "Name used for the device and entity IDs (e.g. 'Jack'). This is permanent — changing it later requires re-adding the integration.",
+          "poll_interval": "How often to fetch the bus GPS position (seconds)",
+          "minutes_before": "Open the tracking window this many minutes before the scheduled pickup",
+          "minutes_after": "Close the tracking window this many minutes after the scheduled dropoff",
+          "halfday_hour": "School pickup before this hour (24h) = Half Day. Default: 13 (1:00 PM)",
+          "early_hour": "School pickup before this hour (24h) = Early Release. Default: 14 (2:00 PM). Must be greater than the Half-Day threshold."
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email address or password.",
+      "cannot_connect": "Unable to reach the Stopfinder API. Check your internet connection.",
+      "invalid_thresholds": "Early Release hour must be greater than the Half-Day hour.",
+      "unknown": "An unexpected error occurred. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "This Stopfinder account is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Stopfinder Options",
+        "data": {
+          "poll_interval": "Poll Interval",
+          "minutes_before": "Start Tracking Before Pickup",
+          "minutes_after": "Stop Tracking After Dropoff",
+          "halfday_hour": "Half-Day Threshold (hour)",
+          "early_hour": "Early Release Threshold (hour)",
+          "zone_neighborhood": "Neighborhood / Pickup Zone",
+          "zone_school": "School Zone"
+        },
+        "data_description": {
+          "poll_interval": "How often to fetch the bus GPS position (seconds)",
+          "minutes_before": "Open the tracking window this many minutes before the scheduled pickup",
+          "minutes_after": "Close the tracking window this many minutes after the scheduled dropoff",
+          "halfday_hour": "School pickup before this hour (24h) = Half Day. Default: 13 (1:00 PM)",
+          "early_hour": "School pickup before this hour (24h) = Early Release. Default: 14 (2:00 PM). Must be greater than Half-Day threshold.",
+          "zone_neighborhood": "Optional – HA zone at the neighborhood pickup/dropoff stop. Stamps Home Pickup Actual (morning) or Home Dropoff Actual (afternoon) automatically.",
+          "zone_school": "Optional – HA zone at the school. Stamps School Dropoff Actual (morning) or School Pickup Actual (afternoon)."
+        }
+      }
+    },
+    "error": {
+      "invalid_thresholds": "Early Release hour must be greater than the Half-Day hour."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "schedule_type": {
+        "state": {
+          "normal": "Normal",
+          "early": "Early Release",
+          "halfday": "Half Day"
+        }
+      }
+    }
+  }
+}

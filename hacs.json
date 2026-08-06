@@ -1,0 +1,10 @@
+{
+    "name": "Stopfinder Bus Tracker",
+    "description": "Track your child's school bus via the Transfinder Stopfinder API",
+    "render_readme": true,
+    "domains": ["device_tracker", "sensor"],
+    "documentation": "https://github.com/steveredden/ha_stopfinder",
+    "issue_tracker": "https://github.com/steveredden/ha_stopfinder/issues",
+    "homeassistant": "2023.6.0",
+    "categories": ["integration"]
+}

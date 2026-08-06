@@ -1,0 +1,31 @@
+alias: Store Bus Actual Timestamps - LH+PP
+description: ""
+mode: single
+triggers:
+  - entity_id: device_tracker.bus_108
+    zone: zone.bus_pickup
+    event: enter
+    trigger: zone
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: time
+            before: "09:00:00"
+        sequence:
+          - metadata: {}
+            data:
+              datetime: "{{ now() }}"
+            target:
+              entity_id: input_datetime.bus_108_home_pickup_actual
+            action: input_datetime.set_datetime
+      - conditions:
+          - condition: time
+            after: "11:00:00"
+        sequence:
+          - metadata: {}
+            data:
+              datetime: "{{ now() }}"
+            target:
+              entity_id: input_datetime.bus_108_home_dropoff_actual
+            action: input_datetime.set_datetime
