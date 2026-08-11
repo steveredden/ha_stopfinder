@@ -1,0 +1,103 @@
+# Stopfinder Bus Tracker Dashboard
+#
+# SETUP:
+#   1. Find your bus number by checking Developer Tools → States and searching
+#      for "device_tracker.bus_". The part after "bus_" is your BUS_NUMBER.
+#      Example: device_tracker.bus_201abc → BUS_NUMBER = 201abc
+#
+#   2. Search-and-replace BUS_NUMBER in this file with your actual bus number.
+#
+#   3. For multiple buses, duplicate the "Bus BUS_NUMBER" section and replace
+#      BUS_NUMBER with each bus number.
+#
+#   4. To import: HA Dashboard → Edit → Raw Configuration Editor → paste.
+#
+# ENTITY REFERENCE (per bus):
+#   device_tracker.bus_BUS_NUMBER          — live GPS, history trail on map
+#   sensor.bus_BUS_NUMBER_home_pickup      — scheduled morning pickup time
+#   sensor.bus_BUS_NUMBER_school_dropoff   — scheduled morning school dropoff
+#   sensor.bus_BUS_NUMBER_school_pickup    — scheduled afternoon school pickup
+#   sensor.bus_BUS_NUMBER_home_dropoff     — scheduled afternoon home dropoff
+#   sensor.bus_BUS_NUMBER_home_pickup_actual     — actual morning pickup stamp
+#   sensor.bus_BUS_NUMBER_school_dropoff_actual  — actual morning school dropoff stamp
+#   sensor.bus_BUS_NUMBER_school_pickup_actual   — actual afternoon school pickup stamp
+#   sensor.bus_BUS_NUMBER_home_dropoff_actual    — actual afternoon home dropoff stamp
+#   sensor.bus_BUS_NUMBER_schedule_type    — normal / early / halfday
+
+title: Stopfinder
+
+views:
+  - title: Bus Tracker
+    path: bus-tracker
+    icon: mdi:bus-school
+    cards:
+
+      # ── Today's date ──────────────────────────────────────────────────────
+      - type: entity
+        entity: sensor.date
+        name: "Today's Date"
+        icon: mdi:calendar-today
+
+      # ── Bus BUS_NUMBER ────────────────────────────────────────────────────
+      - type: vertical-stack
+        cards:
+
+          # Schedule type badge
+          - type: entity
+            entity: sensor.bus_BUS_NUMBER_schedule_type
+            name: Bus BUS_NUMBER – Schedule Type
+            icon: mdi:calendar-clock
+
+          # Map with history trail
+          - type: map
+            title: Bus BUS_NUMBER Location
+            hours_to_show: 1
+            default_zoom: 14
+            auto_fit: true
+            entities:
+              - entity: device_tracker.bus_BUS_NUMBER
+                focus: true
+            theme_mode: auto
+
+          # Schedule vs Actual side by side
+          - type: horizontal-stack
+            cards:
+
+              - type: entities
+                title: Schedule
+                entities:
+                  - entity: sensor.bus_BUS_NUMBER_home_pickup
+                    name: Pickup
+                    icon: mdi:home
+                  - entity: sensor.bus_BUS_NUMBER_school_dropoff
+                    name: Dropoff
+                    icon: mdi:bus-school
+                  - entity: sensor.bus_BUS_NUMBER_school_pickup
+                    name: Pickup
+                    icon: mdi:bus-school
+                  - entity: sensor.bus_BUS_NUMBER_home_dropoff
+                    name: Dropoff
+                    icon: mdi:home
+
+              - type: entities
+                title: Actual
+                entities:
+                  - entity: sensor.bus_BUS_NUMBER_home_pickup_actual
+                    name: Pickup
+                    icon: mdi:home-clock-outline
+                  - entity: sensor.bus_BUS_NUMBER_school_dropoff_actual
+                    name: Dropoff
+                    icon: mdi:school-outline
+                  - entity: sensor.bus_BUS_NUMBER_school_pickup_actual
+                    name: Pickup
+                    icon: mdi:school-outline
+                  - entity: sensor.bus_BUS_NUMBER_home_dropoff_actual
+                    name: Dropoff
+                    icon: mdi:home-clock-outline
+
+      # ── Add additional buses below by duplicating the block above ─────────
+      # - type: vertical-stack
+      #   cards:
+      #     - type: entity
+      #       entity: sensor.bus_SECOND_BUS_NUMBER_schedule_type
+      #       ...

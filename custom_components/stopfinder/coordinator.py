@@ -19,17 +19,23 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    _CONF_MINUTES_AFTER_LEGACY,
+    _CONF_MINUTES_BEFORE_LEGACY,
     API_BASE,
     CONF_EARLY_HOUR,
     CONF_HALFDAY_HOUR,
-    CONF_MINUTES_AFTER,
-    CONF_MINUTES_BEFORE,
+    CONF_MINUTES_AFTER_HOME_DROPOFF,
+    CONF_MINUTES_AFTER_SCHOOL_DROPOFF,
+    CONF_MINUTES_BEFORE_HOME_PICKUP,
+    CONF_MINUTES_BEFORE_SCHOOL_PICKUP,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_USER_AGENT,
     CONF_USERNAME,
-    DEFAULT_MINUTES_AFTER,
-    DEFAULT_MINUTES_BEFORE,
+    DEFAULT_MINUTES_AFTER_HOME_DROPOFF,
+    DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF,
+    DEFAULT_MINUTES_BEFORE_HOME_PICKUP,
+    DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_USER_AGENT,
     DOMAIN,
@@ -42,59 +48,80 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Coordinator interval outside of any tracking window
+_IDLE_INTERVAL = timedelta(hours=1)
+
 
 @dataclass
-class StopfinderData:
-    """All parsed state from one API refresh cycle."""
+class BusData:
+    """All runtime state for one school bus."""
 
-    # Scheduled times (from student schedule API, adjusted by adjustMinutes)
-    home_pickup: datetime | None = None
+    bus_number: str       # raw number from the API (e.g. "108", "201ABC")
+    client_id: str = ""
+    data_source_id: str = ""
+
+    # Scheduled times (API value + adjustMinutes, localised)
+    home_pickup:    datetime | None = None
     school_dropoff: datetime | None = None
-    school_pickup: datetime | None = None
-    home_dropoff: datetime | None = None
+    school_pickup:  datetime | None = None
+    home_dropoff:   datetime | None = None
 
-    # Bus / routing meta
-    bus_number: str | None = None
-    client_id: str | None = None
-    data_source_id: str | None = None
-
-    # Derived
-    schedule_type: str = SCHEDULE_NORMAL   # normal | early | halfday
-    latitude: float | None = None
-    longitude: float | None = None
+    schedule_type:   str = SCHEDULE_NORMAL
+    latitude:        float | None = None
+    longitude:       float | None = None
     tracking_active: bool = False
-    active_trip: str | None = None          # "morning" | "afternoon" | None
-    no_school: bool = False                 # True on weekends/holidays
+    active_trip:     str | None = None   # "morning" | "afternoon" | None
 
 
-class StopfinderCoordinator(DataUpdateCoordinator[StopfinderData]):
-    """Polls the Stopfinder API; caches auth token and daily schedule."""
+def bus_display_name(key: str) -> str:
+    """Human-readable device name for a bus key.
+
+    "108"   → "Bus 108"
+    "108_2" → "Bus 108 (2)"   (two different routes share the same number)
+    """
+    parts = key.rsplit("_", 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return f"Bus {parts[0]} ({parts[1]})"
+    return f"Bus {key}"
+
+
+# coordinator.data type alias: bus_number → BusData.
+# Empty dict means the API returned no schedules for today (weekend / holiday).
+StopfinderCoordinatorData = dict[str, BusData]
+
+
+class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
+    """Polls the Stopfinder API for all students on the account.
+
+    Groups results by bus number.  Each unique bus gets a BusData entry;
+    students sharing a bus are merged into one entry.
+    """
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         self._config_entry = config_entry
         self._token: str | None = None
         self._auth_headers: dict[str, str] = {}
-        self._cached_schedule: dict[str, Any] | None = None
+        self._cached_buses: StopfinderCoordinatorData | None = None
         self._cached_date: str | None = None
-
-        poll_seconds = self._opt(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
 
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=int(poll_seconds)),
+            update_interval=_IDLE_INTERVAL,
         )
 
     # ------------------------------------------------------------------
-    # Helpers
+    # Internal helpers
     # ------------------------------------------------------------------
 
     def _opt(self, key: str, default: Any) -> Any:
-        """Read from options first, then data, then fall back to default."""
         return self._config_entry.options.get(
             key, self._config_entry.data.get(key, default)
         )
+
+    def _edge(self, new_key: str, legacy_key: str, default: int) -> int:
+        return int(self._opt(new_key, self._opt(legacy_key, default)))
 
     def _session_headers(self) -> dict[str, str]:
         ua = self._config_entry.data.get(CONF_USER_AGENT, DEFAULT_USER_AGENT)
@@ -105,124 +132,136 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderData]):
     # ------------------------------------------------------------------
 
     async def async_authenticate(self) -> None:
-        """Authenticate and cache the bearer token."""
         session = async_get_clientsession(self.hass)
-        payload = {
-            "deviceId": "",
-            "grantType": "password",
-            "username": self._config_entry.data[CONF_USERNAME],
-            "password": self._config_entry.data[CONF_PASSWORD],
-            "rfApiVersion": "1.1",
-        }
         async with session.post(
             f"{API_BASE}/tokens",
-            json=payload,
+            json={
+                "deviceId": "",
+                "grantType": "password",
+                "username": self._config_entry.data[CONF_USERNAME],
+                "password": self._config_entry.data[CONF_PASSWORD],
+                "rfApiVersion": "1.1",
+            },
             headers=self._session_headers(),
         ) as resp:
             resp.raise_for_status()
             data = await resp.json()
-
         self._token = data["token"]
         self._auth_headers = {**self._session_headers(), "token": self._token}
 
-    # ------------------------------------------------------------------
-    # API helpers
-    # ------------------------------------------------------------------
-
     async def _api_get(self, path: str) -> Any:
-        """Authenticated GET; re-authenticates once on 401."""
         if not self._token:
             await self.async_authenticate()
-
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE}/{path}"
-
         async with session.get(url, headers=self._auth_headers) as resp:
             if resp.status == 401:
-                _LOGGER.debug("Token expired – re-authenticating")
                 await self.async_authenticate()
-                async with session.get(url, headers=self._auth_headers) as retry:
-                    retry.raise_for_status()
-                    return await retry.json()
+                async with session.get(url, headers=self._auth_headers) as r2:
+                    r2.raise_for_status()
+                    return await r2.json()
             resp.raise_for_status()
             return await resp.json()
 
     # ------------------------------------------------------------------
-    # Schedule parsing
+    # Schedule parsing — groups all students by bus number
     # ------------------------------------------------------------------
 
-    def _parse_schedule(self, raw: list[Any]) -> dict[str, Any]:
-        """Extract and time-adjust trip timestamps from the students API response."""
-        if not raw or not raw[0].get("studentSchedules"):
-            return {}
+    def _parse_all_buses(self, raw: list[Any]) -> StopfinderCoordinatorData:
+        """Return a BusData dict keyed by unique bus key for every route in raw.
 
-        schedules = raw[0]["studentSchedules"][0]
-        trips = schedules.get("trips", [])
-        to_school = [t for t in trips if t.get("toSchool")]
-        from_school = [t for t in trips if not t.get("toSchool")]
+        Two trips with the same bus number AND clientId are the same physical bus
+        (e.g. siblings on the same route) and share one entry.  If the same bus
+        number appears under a different clientId the key is suffixed (_2, _3 …)
+        so each route gets its own device.
+        """
+        buses: dict[str, BusData] = {}
+        halfday_h = int(self._opt(CONF_HALFDAY_HOUR, HALFDAY_THRESHOLD_HOUR))
+        early_h   = int(self._opt(CONF_EARLY_HOUR,   EARLY_THRESHOLD_HOUR))
 
-        def adjust(time_str: str | None, adj_min: int | None) -> datetime | None:
+        def _adjust(time_str: str | None, adj: int | None) -> datetime | None:
             if not time_str:
                 return None
-            naive = datetime.fromisoformat(time_str.replace("T", " "))
-            adjusted = naive + timedelta(minutes=int(adj_min or 0))
+            naive    = datetime.fromisoformat(time_str.replace("T", " "))
+            adjusted = naive + timedelta(minutes=int(adj or 0))
             return dt_util.as_local(adjusted)
 
-        result: dict[str, Any] = {
-            "home_pickup": None,
-            "school_dropoff": None,
-            "school_pickup": None,
-            "home_dropoff": None,
-            "bus_number": None,
-            "client_id": schedules.get("clientId"),
-            "data_source_id": schedules.get("dataSourceId"),
-            "schedule_type": SCHEDULE_NORMAL,
-        }
+        def _key_for(bus_no: str, client_id: str) -> str:
+            """Return existing key if same bus, else a suffixed key for a collision."""
+            if bus_no not in buses or buses[bus_no].client_id == client_id:
+                return bus_no
+            n = 2
+            while f"{bus_no}_{n}" in buses:
+                n += 1
+            return f"{bus_no}_{n}"
 
-        if to_school:
-            t = to_school[0]
-            result["home_pickup"] = adjust(t.get("pickUpTime"), t.get("adjustMinutes"))
-            result["school_dropoff"] = adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
-            result["bus_number"] = t.get("busNumber")
+        for student in raw:
+            for schedule in student.get("studentSchedules", []):
+                client_id      = schedule.get("clientId", "")
+                data_source_id = schedule.get("dataSourceId", "")
+                trips          = schedule.get("trips", [])
+                to_school      = [t for t in trips if t.get("toSchool")]
+                from_school    = [t for t in trips if not t.get("toSchool")]
 
-        if from_school:
-            t = from_school[0]
-            result["school_pickup"] = adjust(t.get("pickUpTime"), t.get("adjustMinutes"))
-            result["home_dropoff"] = adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
-            if not result["bus_number"]:
-                result["bus_number"] = t.get("busNumber")
+                # Morning trip
+                if to_school:
+                    t      = to_school[0]
+                    bus_no = t.get("busNumber", "")
+                    if bus_no:
+                        key = _key_for(bus_no, client_id)
+                        bd  = buses.setdefault(key, BusData(
+                            bus_number=bus_no,
+                            client_id=client_id,
+                            data_source_id=data_source_id,
+                        ))
+                        if bd.home_pickup is None:
+                            bd.home_pickup    = _adjust(t.get("pickUpTime"),  t.get("adjustMinutes"))
+                            bd.school_dropoff = _adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
 
-            sp: datetime | None = result["school_pickup"]
-            if sp:
-                halfday_h = int(self._opt(CONF_HALFDAY_HOUR, HALFDAY_THRESHOLD_HOUR))
-                early_h = int(self._opt(CONF_EARLY_HOUR, EARLY_THRESHOLD_HOUR))
-                if sp.hour < halfday_h:
-                    result["schedule_type"] = SCHEDULE_HALFDAY
-                elif sp.hour < early_h:
-                    result["schedule_type"] = SCHEDULE_EARLY
+                # Afternoon trip (may be a different bus)
+                if from_school:
+                    t      = from_school[0]
+                    bus_no = t.get("busNumber", "")
+                    if bus_no:
+                        key = _key_for(bus_no, client_id)
+                        bd  = buses.setdefault(key, BusData(
+                            bus_number=bus_no,
+                            client_id=client_id,
+                            data_source_id=data_source_id,
+                        ))
+                        if bd.school_pickup is None:
+                            bd.school_pickup = _adjust(t.get("pickUpTime"),  t.get("adjustMinutes"))
+                            bd.home_dropoff  = _adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
 
-        return result
+                        sp = buses[key].school_pickup
+                        if sp and buses[key].schedule_type == SCHEDULE_NORMAL:
+                            if sp.hour < halfday_h:
+                                buses[key].schedule_type = SCHEDULE_HALFDAY
+                            elif sp.hour < early_h:
+                                buses[key].schedule_type = SCHEDULE_EARLY
+
+        return buses
 
     # ------------------------------------------------------------------
-    # Tracking window
+    # Tracking window — per bus
     # ------------------------------------------------------------------
 
-    def _tracking_window(self, sched: dict[str, Any]) -> tuple[bool, str | None]:
-        """Return (in_window, trip_type) given the current local time."""
-        now = dt_util.now()
-        mb = int(self._opt(CONF_MINUTES_BEFORE, DEFAULT_MINUTES_BEFORE))
-        ma = int(self._opt(CONF_MINUTES_AFTER, DEFAULT_MINUTES_AFTER))
+    def _tracking_window(self, bd: BusData) -> tuple[bool, str | None]:
+        """Return (in_window, trip_type) for the current time and this bus."""
+        now  = dt_util.now()
+        e1   = self._edge(CONF_MINUTES_BEFORE_HOME_PICKUP,   _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_HOME_PICKUP)
+        e2   = self._edge(CONF_MINUTES_AFTER_SCHOOL_DROPOFF, _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF)
+        e3   = self._edge(CONF_MINUTES_BEFORE_SCHOOL_PICKUP, _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP)
+        e4   = self._edge(CONF_MINUTES_AFTER_HOME_DROPOFF,   _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_HOME_DROPOFF)
 
-        hp: datetime | None = sched.get("home_pickup")
-        sd: datetime | None = sched.get("school_dropoff")
-        sp: datetime | None = sched.get("school_pickup")
-        hd: datetime | None = sched.get("home_dropoff")
-
-        if hp and sd:
-            if hp - timedelta(minutes=mb) <= now <= sd + timedelta(minutes=ma):
+        # Morning : home_pickup − e1  →  school_dropoff + e2
+        if bd.home_pickup and bd.school_dropoff:
+            if bd.home_pickup - timedelta(minutes=e1) <= now <= bd.school_dropoff + timedelta(minutes=e2):
                 return True, "morning"
-        if sp and hd:
-            if sp - timedelta(minutes=mb) <= now <= hd + timedelta(minutes=ma):
+
+        # Afternoon : school_pickup − e3  →  home_dropoff + e4
+        if bd.school_pickup and bd.home_dropoff:
+            if bd.school_pickup - timedelta(minutes=e3) <= now <= bd.home_dropoff + timedelta(minutes=e4):
                 return True, "afternoon"
 
         return False, None
@@ -231,67 +270,50 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderData]):
     # Main update
     # ------------------------------------------------------------------
 
-    async def _async_update_data(self) -> StopfinderData:
-        data = StopfinderData()
+    async def _async_update_data(self) -> StopfinderCoordinatorData:
         today = dt_util.now().date().isoformat()
 
         try:
-            # Refresh schedule once per calendar day
-            if self._cached_schedule is None or self._cached_date != today:
+            if self._cached_buses is None or self._cached_date != today:
                 raw = await self._api_get(f"students?dateStart={today}&dateEnd={today}")
-                self._cached_schedule = self._parse_schedule(raw)
-                self._cached_date = today
+                self._cached_buses = self._parse_all_buses(raw)
+                self._cached_date  = today
 
-            sched = self._cached_schedule
-            if not sched:
-                data.no_school = True
-                return data
+            buses = self._cached_buses
+            if not buses:
+                # Weekend / holiday — no schedule
+                self.update_interval = _IDLE_INTERVAL
+                return {}
 
-            data.home_pickup = sched.get("home_pickup")
-            data.school_dropoff = sched.get("school_dropoff")
-            data.school_pickup = sched.get("school_pickup")
-            data.home_dropoff = sched.get("home_dropoff")
-            data.bus_number = sched.get("bus_number")
-            data.client_id = sched.get("client_id")
-            data.data_source_id = sched.get("data_source_id")
-            data.schedule_type = sched.get("schedule_type", SCHEDULE_NORMAL)
+            poll_s = int(self._opt(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
+            any_active = False
 
-            in_window, trip = self._tracking_window(sched)
-            data.tracking_active = in_window
-            data.active_trip = trip
+            for bd in buses.values():
+                in_window, trip = self._tracking_window(bd)
+                bd.tracking_active = in_window
+                bd.active_trip     = trip
+                bd.latitude        = None
+                bd.longitude       = None
 
-            if in_window and sched.get("client_id") and sched.get("bus_number"):
-                group = (
-                    f"{sched['client_id']}_"
-                    f"{sched['data_source_id']}_"
-                    f"{sched['bus_number']}"
-                )
-                gps_raw = await self._api_get(f"gps?groupName={group}")
+                if in_window:
+                    any_active = True
+                    group = f"{bd.client_id}_{bd.data_source_id}_{bd.bus_number}"
+                    gps_raw = await self._api_get(f"gps?groupName={group}")
+                    gps = (gps_raw[0] if isinstance(gps_raw, list) else gps_raw) or {}
+                    lat = gps.get("latitude")
+                    lon = gps.get("longitude")
+                    if lat is not None and lon is not None:
+                        bd.latitude  = float(lat)
+                        bd.longitude = float(lon)
 
-                # API may return a single object or a list
-                if isinstance(gps_raw, list):
-                    gps = gps_raw[0] if gps_raw else {}
-                elif isinstance(gps_raw, dict):
-                    gps = gps_raw
-                else:
-                    gps = {}
-
-                lat = gps.get("latitude")
-                lon = gps.get("longitude")
-                if lat is not None and lon is not None:
-                    data.latitude = float(lat)
-                    data.longitude = float(lon)
+            self.update_interval = (
+                timedelta(seconds=poll_s) if any_active else _IDLE_INTERVAL
+            )
+            return buses
 
         except Exception as err:
             raise UpdateFailed(f"Stopfinder API error: {err}") from err
 
-        return data
-
-    # ------------------------------------------------------------------
-    # Utilities
-    # ------------------------------------------------------------------
-
     def invalidate_schedule_cache(self) -> None:
-        """Force a fresh schedule fetch on the next update cycle."""
-        self._cached_schedule = None
-        self._cached_date = None
+        self._cached_buses = None
+        self._cached_date  = None
