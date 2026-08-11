@@ -6,11 +6,10 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.util import dt as dt_util
 
 from .const import (
     API_BASE,
@@ -39,10 +38,36 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_WINDOW_SELECTOR = selector.NumberSelectorConfig(
-    min=0, max=60, step=5, unit_of_measurement="min",
-    mode=selector.NumberSelectorMode.SLIDER,
-)
+
+def _window_selector() -> selector.NumberSelector:
+    """Return a 0–60 min slider selector (built lazily, not at module load)."""
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0, max=60, step=5,
+            unit_of_measurement="min",
+            mode=selector.NumberSelectorMode.SLIDER,
+        )
+    )
+
+
+def _poll_selector() -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=5, max=300, step=5,
+            unit_of_measurement="seconds",
+            mode=selector.NumberSelectorMode.SLIDER,
+        )
+    )
+
+
+def _hour_selector(min_h: int, max_h: int) -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=min_h, max=max_h, step=1,
+            unit_of_measurement="h (24h)",
+            mode=selector.NumberSelectorMode.SLIDER,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -100,11 +125,13 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
     """Multi-step setup wizard: credentials → tracking preferences."""
 
     VERSION = 1
+    MINOR_VERSION = 1
+
     _credentials: dict[str, Any] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -154,7 +181,7 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_preferences(
         self, user_input: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -163,7 +190,7 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
             if early_h <= halfday_h:
                 errors["base"] = "invalid_thresholds"
             else:
-                data = {
+                return self.async_create_entry(title="Stopfinder", data={
                     **self._credentials,
                     CONF_POLL_INTERVAL:                user_input[CONF_POLL_INTERVAL],
                     CONF_MINUTES_BEFORE_HOME_PICKUP:   user_input[CONF_MINUTES_BEFORE_HOME_PICKUP],
@@ -172,51 +199,37 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_MINUTES_AFTER_HOME_DROPOFF:   user_input[CONF_MINUTES_AFTER_HOME_DROPOFF],
                     CONF_HALFDAY_HOUR:                 halfday_h,
                     CONF_EARLY_HOUR:                   early_h,
-                }
-                return self.async_create_entry(title="Stopfinder", data=data)
+                })
 
         return self.async_show_form(
             step_id="preferences",
             data_schema=vol.Schema({
-                vol.Required(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=5, max=300, step=5,
-                        unit_of_measurement="seconds",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )
-                ),
+                vol.Required(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL):
+                    _poll_selector(),
                 vol.Required(CONF_MINUTES_BEFORE_HOME_PICKUP,
                              default=DEFAULT_MINUTES_BEFORE_HOME_PICKUP):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_AFTER_SCHOOL_DROPOFF,
                              default=DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_BEFORE_SCHOOL_PICKUP,
                              default=DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_AFTER_HOME_DROPOFF,
                              default=DEFAULT_MINUTES_AFTER_HOME_DROPOFF):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_HALFDAY_HOUR, default=HALFDAY_THRESHOLD_HOUR):
-                    selector.NumberSelector(selector.NumberSelectorConfig(
-                        min=8, max=15, step=1,
-                        unit_of_measurement="h (24h)",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )),
+                    _hour_selector(8, 15),
                 vol.Required(CONF_EARLY_HOUR, default=EARLY_THRESHOLD_HOUR):
-                    selector.NumberSelector(selector.NumberSelectorConfig(
-                        min=9, max=16, step=1,
-                        unit_of_measurement="h (24h)",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )),
+                    _hour_selector(9, 16),
             }),
             errors=errors,
         )
 
-    @staticmethod
+    @classmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        return StopfinderOptionsFlow(config_entry)
+    def async_get_options_flow(cls, config_entry: ConfigEntry) -> OptionsFlow:
+        return StopfinderOptionsFlow()
 
 
 # ---------------------------------------------------------------------------
@@ -224,14 +237,15 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
 # ---------------------------------------------------------------------------
 
 class StopfinderOptionsFlow(OptionsFlow):
-    """Adjust settings post-setup without reinstalling."""
+    """Adjust settings post-setup.
 
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        self._config_entry = config_entry
+    self.config_entry is injected automatically by HA (2024.4+).
+    Do not pass config_entry to __init__.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -244,10 +258,10 @@ class StopfinderOptionsFlow(OptionsFlow):
                     user_input.pop(CONF_ZONE_NEIGHBORHOOD, None)
                 if not user_input.get(CONF_ZONE_SCHOOL):
                     user_input.pop(CONF_ZONE_SCHOOL, None)
-                return self.async_create_entry(title="", data=user_input)
+                return self.async_create_entry(data=user_input)
 
-        opts = self._config_entry.options
-        data = self._config_entry.data
+        opts = self.config_entry.options
+        data = self.config_entry.data
 
         def _get(key: str, legacy_key: str, default: Any) -> Any:
             return opts.get(key, data.get(key, opts.get(legacy_key, data.get(legacy_key, default))))
@@ -257,37 +271,25 @@ class StopfinderOptionsFlow(OptionsFlow):
             data_schema=vol.Schema({
                 vol.Required(CONF_POLL_INTERVAL,
                              default=opts.get(CONF_POLL_INTERVAL, data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))):
-                    selector.NumberSelector(selector.NumberSelectorConfig(
-                        min=5, max=300, step=5,
-                        unit_of_measurement="seconds",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )),
+                    _poll_selector(),
                 vol.Required(CONF_MINUTES_BEFORE_HOME_PICKUP,
                              default=_get(CONF_MINUTES_BEFORE_HOME_PICKUP,   "minutes_before", DEFAULT_MINUTES_BEFORE_HOME_PICKUP)):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_AFTER_SCHOOL_DROPOFF,
                              default=_get(CONF_MINUTES_AFTER_SCHOOL_DROPOFF, "minutes_after",  DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF)):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_BEFORE_SCHOOL_PICKUP,
                              default=_get(CONF_MINUTES_BEFORE_SCHOOL_PICKUP, "minutes_before", DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP)):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_MINUTES_AFTER_HOME_DROPOFF,
                              default=_get(CONF_MINUTES_AFTER_HOME_DROPOFF,   "minutes_after",  DEFAULT_MINUTES_AFTER_HOME_DROPOFF)):
-                    selector.NumberSelector(_WINDOW_SELECTOR),
+                    _window_selector(),
                 vol.Required(CONF_HALFDAY_HOUR,
                              default=opts.get(CONF_HALFDAY_HOUR, data.get(CONF_HALFDAY_HOUR, HALFDAY_THRESHOLD_HOUR))):
-                    selector.NumberSelector(selector.NumberSelectorConfig(
-                        min=8, max=15, step=1,
-                        unit_of_measurement="h (24h)",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )),
+                    _hour_selector(8, 15),
                 vol.Required(CONF_EARLY_HOUR,
                              default=opts.get(CONF_EARLY_HOUR, data.get(CONF_EARLY_HOUR, EARLY_THRESHOLD_HOUR))):
-                    selector.NumberSelector(selector.NumberSelectorConfig(
-                        min=9, max=16, step=1,
-                        unit_of_measurement="h (24h)",
-                        mode=selector.NumberSelectorMode.SLIDER,
-                    )),
+                    _hour_selector(9, 16),
                 vol.Optional(CONF_ZONE_NEIGHBORHOOD,
                              description={"suggested_value": opts.get(CONF_ZONE_NEIGHBORHOOD)}):
                     selector.EntitySelector(selector.EntitySelectorConfig(domain="zone", multiple=False)),
