@@ -195,6 +195,30 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                 n += 1
             return f"{bus_no}_{n}"
 
+        def _merge_trip(
+            t: dict, client_id: str, data_source_id: str,
+            guard_attr: str, pickup_attr: str, dropoff_attr: str,
+        ) -> str | None:
+            """Merge one trip's pickup/dropoff into its bus; return the bus key.
+
+            The guard attribute keeps the first schedule to claim this bus (e.g.
+            siblings on the same route) authoritative — later schedules don't
+            overwrite times already set.  Returns None when the trip has no bus.
+            """
+            bus_no = t.get("busNumber", "")
+            if not bus_no:
+                return None
+            key = _key_for(bus_no, client_id)
+            bd  = buses.setdefault(key, BusData(
+                bus_number=bus_no,
+                client_id=client_id,
+                data_source_id=data_source_id,
+            ))
+            if getattr(bd, guard_attr) is None:
+                setattr(bd, pickup_attr,  _adjust(t.get("pickUpTime"),  t.get("adjustMinutes")))
+                setattr(bd, dropoff_attr, _adjust(t.get("dropOffTime"), t.get("adjustMinutes")))
+            return key
+
         for student in raw:
             for schedule in student.get("studentSchedules", []):
                 client_id      = schedule.get("clientId", "")
@@ -205,34 +229,14 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
 
                 # Morning trip
                 if to_school:
-                    t      = to_school[0]
-                    bus_no = t.get("busNumber", "")
-                    if bus_no:
-                        key = _key_for(bus_no, client_id)
-                        bd  = buses.setdefault(key, BusData(
-                            bus_number=bus_no,
-                            client_id=client_id,
-                            data_source_id=data_source_id,
-                        ))
-                        if bd.home_pickup is None:
-                            bd.home_pickup    = _adjust(t.get("pickUpTime"),  t.get("adjustMinutes"))
-                            bd.school_dropoff = _adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
+                    _merge_trip(to_school[0], client_id, data_source_id,
+                                "home_pickup", "home_pickup", "school_dropoff")
 
                 # Afternoon trip (may be a different bus)
                 if from_school:
-                    t      = from_school[0]
-                    bus_no = t.get("busNumber", "")
-                    if bus_no:
-                        key = _key_for(bus_no, client_id)
-                        bd  = buses.setdefault(key, BusData(
-                            bus_number=bus_no,
-                            client_id=client_id,
-                            data_source_id=data_source_id,
-                        ))
-                        if bd.school_pickup is None:
-                            bd.school_pickup = _adjust(t.get("pickUpTime"),  t.get("adjustMinutes"))
-                            bd.home_dropoff  = _adjust(t.get("dropOffTime"), t.get("adjustMinutes"))
-
+                    key = _merge_trip(from_school[0], client_id, data_source_id,
+                                      "school_pickup", "school_pickup", "home_dropoff")
+                    if key is not None:
                         sp = buses[key].school_pickup
                         if sp and buses[key].schedule_type == SCHEDULE_NORMAL:
                             if sp.hour < halfday_h:

@@ -3,13 +3,12 @@ from __future__ import annotations
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import BusData, StopfinderCoordinator, StopfinderCoordinatorData, bus_display_name
+from .coordinator import StopfinderCoordinator
+from .entity import StopfinderBusEntity, async_setup_bus_entities
 
 
 async def async_setup_entry(
@@ -18,34 +17,19 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: StopfinderCoordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    known: set[str] = set()
 
-    def _add_new_buses(data: StopfinderCoordinatorData) -> None:
-        new = [
-            StopfinderBusTracker(coordinator, config_entry, key)
-            for key in data
-            if key not in known
-        ]
-        if new:
-            known.update(t._bus_key for t in new)
-            async_add_entities(new)
-
-    if coordinator.data:
-        _add_new_buses(coordinator.data)
-
-    @callback
-    def _on_update() -> None:
-        if coordinator.data:
-            _add_new_buses(coordinator.data)
-
-    config_entry.async_on_unload(coordinator.async_add_listener(_on_update))
+    async_setup_bus_entities(
+        coordinator,
+        config_entry,
+        async_add_entities,
+        lambda bus_key: [StopfinderBusTracker(coordinator, config_entry, bus_key)],
+    )
 
 
-class StopfinderBusTracker(CoordinatorEntity[StopfinderCoordinator], TrackerEntity):
+class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
     """GPS tracker for one school bus."""
 
     _attr_icon = "mdi:bus-school"
-    _attr_has_entity_name = True
     _attr_name = None  # entity name = device name
 
     def __init__(
@@ -54,24 +38,8 @@ class StopfinderBusTracker(CoordinatorEntity[StopfinderCoordinator], TrackerEnti
         config_entry: ConfigEntry,
         bus_key: str,
     ) -> None:
-        super().__init__(coordinator)
-        self._config_entry = config_entry
-        self._bus_key      = bus_key
+        super().__init__(coordinator, config_entry, bus_key)
         self._attr_unique_id = f"{config_entry.entry_id}_tracker_{bus_key}"
-
-    @property
-    def _bus_data(self) -> BusData | None:
-        d = self.coordinator.data
-        return d.get(self._bus_key) if d else None
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"{self._config_entry.entry_id}_{self._bus_key}")},
-            name=bus_display_name(self._bus_key),
-            manufacturer="Transfinder",
-            model="Stopfinder",
-        )
 
     @property
     def available(self) -> bool:
