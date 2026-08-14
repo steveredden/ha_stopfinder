@@ -56,12 +56,6 @@ views:
                   {%- if d == 0 %} <em>(on time)</em>{%- elif d > 0 %} <em>(+{{ d }}m)</em>{%- else %} <em>({{ d }}m)</em>{%- endif -%}
                 {%- endif -%}
               {%- endmacro -%}
-              {%- macro dur(t1, t2) -%}
-                {%- if t1 not in ['unknown','unavailable'] and t2 not in ['unknown','unavailable'] -%}
-                  {%- set d = ((as_timestamp(t2) - as_timestamp(t1)) / 60) | round(0) | int -%}
-                   · {{ d }} min
-                {%- endif -%}
-              {%- endmacro -%}
               {%- set s_hp = states('sensor.bus_BUS_NUMBER_home_pickup') -%}
               {%- set s_sd = states('sensor.bus_BUS_NUMBER_school_dropoff') -%}
               {%- set s_sp = states('sensor.bus_BUS_NUMBER_school_pickup') -%}
@@ -73,10 +67,9 @@ views:
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
-                <th align="center" width="33%">Sched</th>
+                <th align="center" width="33%">Scheduled</th>
                 <th align="center" width="33%">Actual</th>
               </tr>
-              <tr><td colspan="3"><b>Morning</b>{{ dur(a_hp, a_sd) }}</td></tr>
               <tr>
                 <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_hp) }}</td>
@@ -87,7 +80,6 @@ views:
                 <td align="center">{{ fmt(s_sd) }}</td>
                 <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
               </tr>
-              <tr><td colspan="3"><br><b>Afternoon</b>{{ dur(a_sp, a_hd) }}</td></tr>
               <tr>
                 <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_sp) }}</td>
