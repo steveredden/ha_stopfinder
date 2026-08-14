@@ -42,12 +42,6 @@ views:
       - type: vertical-stack
         cards:
 
-          # Schedule type badge
-          - type: entity
-            entity: sensor.bus_BUS_NUMBER_schedule_type
-            name: Bus BUS_NUMBER – Schedule Type
-            icon: mdi:calendar-clock
-
           # Map with history trail
           - type: map
             title: Bus BUS_NUMBER Location
@@ -58,6 +52,17 @@ views:
               - entity: device_tracker.bus_BUS_NUMBER
                 focus: true
             theme_mode: auto
+            # ── card_mod users ───────────────────────────────────────────────
+            # card_mod:
+            #   style:
+            #     ha-map$: |
+            #       .leaflet-control-attribution {
+            #         visibility: hidden;
+            #        }
+            #     ha-map $ ha-entity-marker $: |
+            #       .marker {
+            #         background-color: transparent !important;
+            #       }
 
           # Schedule vs Actual side by side
           - type: horizontal-stack
