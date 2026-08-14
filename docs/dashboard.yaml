@@ -45,10 +45,42 @@ views:
             #        background-color: transparent !important;
             #      }
 
+          # ── Status / tracking info ────────────────────────────────────────
           - type: markdown
             content: |
               {%- set time_fmt = '%H:%M' -%}
-              {#- Change to '%I:%M %p' for 12-hour format (e.g. 08:20 → 08:20 AM) -#}
+              {#- Change to '%I:%M %p' for 12-hour format -#}
+              {%- macro fmt(s) -%}
+                {%- if s -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- else -%}—{%- endif -%}
+              {%- endmacro -%}
+              {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
+              {%- set mws = state_attr(dt, 'morning_window_start') -%}
+              {%- set mwe = state_attr(dt, 'morning_window_end') -%}
+              {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
+              {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
+              {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
+              {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
+              {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
+              {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
+              {%- set ns = namespace(chip='No active trip') -%}
+              {%- if state_attr(dt, 'tracking_active') -%}
+                {%- set trip = state_attr(dt, 'active_trip') -%}
+                {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
+              {%- endif -%}
+              {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
+              {{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }}
+
+              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**{% if mws and mwe %} &nbsp;{{ fmt(mws) }} – {{ fmt(mwe) }}{% endif %}
+              {% if sn_hp or sn_sd %}<small><ha-icon icon="mdi:home"></ha-icon> {{ sn_hp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:school"></ha-icon> {{ sn_sd or '—' }}</small>{% endif %}
+
+              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**{% if aws and awe %} &nbsp;{{ fmt(aws) }} – {{ fmt(awe) }}{% endif %}
+              {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
+
+          # ── Schedule table ────────────────────────────────────────────────
+          - type: markdown
+            content: |
+              {%- set time_fmt = '%H:%M' -%}
+              {#- Change to '%I:%M %p' for 12-hour format -#}
               {%- macro fmt(s) -%}
                 {%- if s in ['unknown','unavailable'] -%}—{%- else -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- endif -%}
               {%- endmacro -%}
@@ -66,35 +98,6 @@ views:
               {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
               {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
               {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
-              {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
-              {%- set mws = state_attr(dt, 'morning_window_start') -%}
-              {%- set mwe = state_attr(dt, 'morning_window_end') -%}
-              {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
-              {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
-              {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
-              {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
-              {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
-              {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
-              {%- set ns = namespace(chip='No active trip', tip='') -%}
-              {%- if state_attr(dt, 'tracking_active') -%}
-                {%- set trip = state_attr(dt, 'active_trip') -%}
-                {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
-                {%- set ns.tip = 'GPS ends at ' ~ fmt(mwe if trip == 'morning' else awe) -%}
-              {%- elif mws and as_timestamp(now()) < as_timestamp(mws) -%}
-                {%- set ns.tip = 'GPS starts at ' ~ fmt(mws) -%}
-              {%- elif aws and as_timestamp(now()) < as_timestamp(aws) -%}
-                {%- set ns.tip = 'GPS starts at ' ~ fmt(aws) -%}
-              {%- else -%}
-                {%- set ns.tip = 'No tracking scheduled' -%}
-              {%- endif -%}
-              {%- if sn_hp or sn_sd -%}
-                {%- set ns.tip = ns.tip ~ ' · Morning: ' ~ (sn_hp or '?') ~ ' → ' ~ (sn_sd or '?') -%}
-              {%- endif -%}
-              {%- if sn_sp or sn_hd -%}
-                {%- set ns.tip = ns.tip ~ ' · Afternoon: ' ~ (sn_sp or '?') ~ ' → ' ~ (sn_hd or '?') -%}
-              {%- endif -%}
-              {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
-              <small>{{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }} <abbr title="{{ ns.tip }}"><ha-icon icon="mdi:information-outline"></ha-icon></abbr></small>
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
