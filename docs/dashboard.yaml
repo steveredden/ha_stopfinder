@@ -72,31 +72,31 @@ views:
               {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
               <table width="100%">
               <tr>
-                <th align="left" width="45%">&nbsp;</th>
-                <th align="right" width="22%">Sched</th>
-                <th align="left" width="33%">Actual</th>
+                <th align="left" width="34%">&nbsp;</th>
+                <th align="center" width="33%">Sched</th>
+                <th align="center" width="33%">Actual</th>
               </tr>
               <tr><td colspan="3"><b>Morning</b>{{ dur(a_hp, a_sd) }}</td></tr>
               <tr>
                 <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
-                <td align="right">{{ fmt(s_hp) }}</td>
-                <td>{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
+                <td align="center">{{ fmt(s_hp) }}</td>
+                <td align="center">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
               </tr>
               <tr>
                 <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
-                <td align="right">{{ fmt(s_sd) }}</td>
-                <td>{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
+                <td align="center">{{ fmt(s_sd) }}</td>
+                <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
               </tr>
               <tr><td colspan="3"><br><b>Afternoon</b>{{ dur(a_sp, a_hd) }}</td></tr>
               <tr>
                 <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
-                <td align="right">{{ fmt(s_sp) }}</td>
-                <td>{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
+                <td align="center">{{ fmt(s_sp) }}</td>
+                <td align="center">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
               </tr>
               <tr>
                 <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
-                <td align="right">{{ fmt(s_hd) }}</td>
-                <td>{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
+                <td align="center">{{ fmt(s_hd) }}</td>
+                <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
             # ── card_mod users ──────────────────────────────────────────────
