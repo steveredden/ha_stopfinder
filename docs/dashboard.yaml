@@ -71,36 +71,47 @@ views:
               {%- set mwe = state_attr(dt, 'morning_window_end') -%}
               {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
               {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
-              {%- macro win(s, e) -%}
-                {%- if s and e -%}GPS {{ fmt(s) }}–{{ fmt(e) }}{%- else -%}GPS window unknown{%- endif -%}
-              {%- endmacro -%}
+              {%- set ns = namespace(chip='No active trip', tip='') -%}
+              {%- if state_attr(dt, 'tracking_active') -%}
+                {%- set trip = state_attr(dt, 'active_trip') -%}
+                {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
+                {%- set ns.tip = 'GPS ends at ' ~ fmt(mwe if trip == 'morning' else awe) -%}
+              {%- elif mws and as_timestamp(now()) < as_timestamp(mws) -%}
+                {%- set ns.tip = 'GPS starts at ' ~ fmt(mws) -%}
+              {%- elif aws and as_timestamp(now()) < as_timestamp(aws) -%}
+                {%- set ns.tip = 'GPS starts at ' ~ fmt(aws) -%}
+              {%- else -%}
+                {%- set ns.tip = 'No tracking scheduled' -%}
+              {%- endif -%}
+              {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
                 <th align="center" width="33%">Scheduled</th>
                 <th align="center" width="33%">Actual</th>
               </tr>
-              <tr title="{{ win(mws, mwe) }}">
+              <tr>
                 <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_hp) }}</td>
                 <td align="center">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
               </tr>
-              <tr title="{{ win(mws, mwe) }}">
+              <tr>
                 <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
                 <td align="center">{{ fmt(s_sd) }}</td>
                 <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
               </tr>
-              <tr title="{{ win(aws, awe) }}">
+              <tr>
                 <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_sp) }}</td>
                 <td align="center">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
               </tr>
-              <tr title="{{ win(aws, awe) }}">
+              <tr>
                 <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
                 <td align="center">{{ fmt(s_hd) }}</td>
                 <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
+              <small><b>{{ ns.chip }}</b> &nbsp;·&nbsp; Last GPS: {{ last_gps }} <abbr title="{{ ns.tip }}">(i)</abbr></small>
             # ── card_mod users ──────────────────────────────────────────────
             # Adds borders + padding to the 12 data cells only, and fixes
             # th alignment (HA markdown CSS overrides align= on th to left).
