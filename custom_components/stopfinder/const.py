@@ -22,7 +22,7 @@ STOP_RADIUS_M = 100
 # minutes of the scheduled stop time.  Prevents an earlier bus run to the
 # same coordinates (e.g. early-dismissal middle school) from being counted
 # as this student's trip event.
-STOP_TIME_GUARD_MIN = 30
+STOP_TIME_GUARD_MIN = 20
 
 PLATFORMS = ["device_tracker", "sensor"]
 
