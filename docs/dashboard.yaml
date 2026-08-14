@@ -69,6 +69,18 @@ views:
               <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**
               {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
 
+            # ── card_mod users ──────────────────────────────────────────────
+            # Removes the border-bottom that HA's constructed stylesheet adds
+            # to all td elements by default. The status row is a layout table,
+            # not a data table — it should have no visible borders.
+            #card_mod:
+            #  style:
+            #    ha-markdown$: |
+            #      ha-markdown-element {
+            #        --markdown-table-border-width: 0;
+            #        --markdown-table-border-style: none;
+            #      }
+
           # ── Schedule table ────────────────────────────────────────────────
           - type: markdown
             content: |
