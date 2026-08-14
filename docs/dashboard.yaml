@@ -4,7 +4,7 @@
 #   1. Find your bus number: Developer Tools → States → search "device_tracker.bus_"
 #      Example: device_tracker.bus_201abc → BUS_NUMBER = 201abc
 #   2. Search-and-replace BUS_NUMBER with your actual bus number.
-#   3. For multiple buses, duplicate the horizontal-stack block.
+#   3. For multiple buses, duplicate the vertical-stack block.
 #   4. Import: Dashboard → Edit → Raw Configuration Editor → paste.
 
 title: Stopfinder
@@ -16,10 +16,7 @@ views:
     cards:
 
       # ── Bus BUS_NUMBER ────────────────────────────────────────────────────
-      # Layout: map on the left, info + table stacked on the right.
-      # Default split is 50/50 — uncomment the card_mod block at the bottom
-      # of this horizontal-stack to set a 60/40 proportion.
-      - type: horizontal-stack
+      - type: vertical-stack
         cards:
 
           - type: map
@@ -48,142 +45,122 @@ views:
             #        background-color: transparent !important;
             #      }
 
-          - type: vertical-stack
-            cards:
+          # ── Status / tracking info ────────────────────────────────────────
+          - type: markdown
+            content: |
+              {%- set time_fmt = '%H:%M' -%}
+              {#- Change to '%I:%M %p' for 12-hour format -#}
+              {%- macro fmt(s) -%}
+                {%- if s -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- else -%}—{%- endif -%}
+              {%- endmacro -%}
+              {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
+              {%- set mws = state_attr(dt, 'morning_window_start') -%}
+              {%- set mwe = state_attr(dt, 'morning_window_end') -%}
+              {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
+              {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
+              {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
+              {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
+              {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
+              {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
+              {%- set ns = namespace(chip='No active trip') -%}
+              {%- if state_attr(dt, 'tracking_active') -%}
+                {%- set trip = state_attr(dt, 'active_trip') -%}
+                {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
+              {%- endif -%}
+              {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
+              {{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }}
 
-              # ── Status / tracking info ──────────────────────────────────────
-              - type: markdown
-                content: |
-                  {%- set time_fmt = '%H:%M' -%}
-                  {#- Change to '%I:%M %p' for 12-hour format -#}
-                  {%- macro fmt(s) -%}
-                    {%- if s -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- else -%}—{%- endif -%}
-                  {%- endmacro -%}
-                  {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
-                  {%- set mws = state_attr(dt, 'morning_window_start') -%}
-                  {%- set mwe = state_attr(dt, 'morning_window_end') -%}
-                  {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
-                  {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
-                  {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
-                  {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
-                  {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
-                  {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
-                  {%- set ns = namespace(chip='No active trip') -%}
-                  {%- if state_attr(dt, 'tracking_active') -%}
-                    {%- set trip = state_attr(dt, 'active_trip') -%}
-                    {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
-                  {%- endif -%}
-                  {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
-                  {{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }}
+              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**{% if mws and mwe %} &nbsp;{{ fmt(mws) }} – {{ fmt(mwe) }}{% endif %}
+              {% if sn_hp or sn_sd %}<small><ha-icon icon="mdi:home"></ha-icon> {{ sn_hp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:school"></ha-icon> {{ sn_sd or '—' }}</small>{% endif %}
 
-                  <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**{% if mws and mwe %} &nbsp;{{ fmt(mws) }} – {{ fmt(mwe) }}{% endif %}
-                  {% if sn_hp or sn_sd %}<small><ha-icon icon="mdi:home"></ha-icon> {{ sn_hp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:school"></ha-icon> {{ sn_sd or '—' }}</small>{% endif %}
+              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**{% if aws and awe %} &nbsp;{{ fmt(aws) }} – {{ fmt(awe) }}{% endif %}
+              {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
 
-                  <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**{% if aws and awe %} &nbsp;{{ fmt(aws) }} – {{ fmt(awe) }}{% endif %}
-                  {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
-
-              # ── Schedule table ──────────────────────────────────────────────
-              - type: markdown
-                content: |
-                  {%- set time_fmt = '%H:%M' -%}
-                  {#- Change to '%I:%M %p' for 12-hour format -#}
-                  {%- macro fmt(s) -%}
-                    {%- if s in ['unknown','unavailable'] -%}—{%- else -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- endif -%}
-                  {%- endmacro -%}
-                  {%- macro delta(sc, ac) -%}
-                    {%- if ac not in ['unknown','unavailable'] and sc not in ['unknown','unavailable'] -%}
-                      {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) | round(0) | int -%}
-                      {%- if d == 0 %} <em>(on time)</em>{%- elif d > 0 %} <em>(+{{ d }}m)</em>{%- else %} <em>({{ d }}m)</em>{%- endif -%}
-                    {%- endif -%}
-                  {%- endmacro -%}
-                  {%- set s_hp = states('sensor.bus_BUS_NUMBER_home_pickup') -%}
-                  {%- set s_sd = states('sensor.bus_BUS_NUMBER_school_dropoff') -%}
-                  {%- set s_sp = states('sensor.bus_BUS_NUMBER_school_pickup') -%}
-                  {%- set s_hd = states('sensor.bus_BUS_NUMBER_home_dropoff') -%}
-                  {%- set a_hp = states('sensor.bus_BUS_NUMBER_home_pickup_actual') -%}
-                  {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
-                  {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
-                  {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
-                  <table width="100%">
-                  <tr>
-                    <th align="left" width="34%">&nbsp;</th>
-                    <th align="center" width="33%">Scheduled</th>
-                    <th align="center" width="33%">Actual</th>
-                  </tr>
-                  <tr>
-                    <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
-                    <td align="center">{{ fmt(s_hp) }}</td>
-                    <td align="center">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
-                  </tr>
-                  <tr>
-                    <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
-                    <td align="center">{{ fmt(s_sd) }}</td>
-                    <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
-                  </tr>
-                  <tr>
-                    <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
-                    <td align="center">{{ fmt(s_sp) }}</td>
-                    <td align="center">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
-                  </tr>
-                  <tr>
-                    <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
-                    <td align="center">{{ fmt(s_hd) }}</td>
-                    <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
-                  </tr>
-                  </table>
-                # ── card_mod users ────────────────────────────────────────────
-                # Adds borders + padding to the 12 data cells only, and fixes
-                # th alignment (HA markdown CSS overrides align= on th to left).
-                # Requires the card_mod HACS frontend resource.
-                #
-                # ha-markdown$ pierces ha-markdown's shadow DOM.
-                #
-                # --markdown-table-border-* are zeroed on ha-markdown-element to
-                # suppress the constructed stylesheet's default row lines at
-                # source, avoiding an !important fight. Borders are then
-                # selectively re-added only to td:not([colspan]) — the 4 data
-                # rows, 3 cells each. The rgba fallback ensures the border is
-                # always visible if --divider-color doesn't resolve in scope.
-                #card_mod:
-                #  style:
-                #    ha-markdown$: |
-                #      ha-markdown-element {
-                #        --markdown-table-border-width: 0;
-                #        --markdown-table-border-style: none;
-                #      }
-                #      table {
-                #        border-collapse: collapse;
-                #      }
-                #      table th {
-                #        text-align: center;
-                #      }
-                #      table th:first-child {
-                #        text-align: left;
-                #      }
-                #      table td:not([colspan]) {
-                #        border: 1px solid var(--divider-color, rgba(255,255,255,0.15)) !important;
-                #        padding: 4px 8px !important;
-                #      }
-
-        # ── card_mod users ──────────────────────────────────────────────────
-        # Controls map vs panel column proportions. Requires card_mod.
-        # hui-card is the wrapper HA injects around each child inside the
-        # horizontal-stack shadow DOM.
-        # 3fr/2fr = ~60% map / ~40% panels. Adjust to taste.
-        # align-self: flex-start prevents the shorter panel column from
-        # stretching to match the map height.
-        #card_mod:
-        #  style: |
-        #    hui-card:first-child {
-        #      flex: 3 !important;
-        #    }
-        #    hui-card:last-child {
-        #      flex: 2 !important;
-        #      align-self: flex-start;
-        #    }
+          # ── Schedule table ────────────────────────────────────────────────
+          - type: markdown
+            content: |
+              {%- set time_fmt = '%H:%M' -%}
+              {#- Change to '%I:%M %p' for 12-hour format -#}
+              {%- macro fmt(s) -%}
+                {%- if s in ['unknown','unavailable'] -%}—{%- else -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- endif -%}
+              {%- endmacro -%}
+              {%- macro delta(sc, ac) -%}
+                {%- if ac not in ['unknown','unavailable'] and sc not in ['unknown','unavailable'] -%}
+                  {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) | round(0) | int -%}
+                  {%- if d == 0 %} <em>(on time)</em>{%- elif d > 0 %} <em>(+{{ d }}m)</em>{%- else %} <em>({{ d }}m)</em>{%- endif -%}
+                {%- endif -%}
+              {%- endmacro -%}
+              {%- set s_hp = states('sensor.bus_BUS_NUMBER_home_pickup') -%}
+              {%- set s_sd = states('sensor.bus_BUS_NUMBER_school_dropoff') -%}
+              {%- set s_sp = states('sensor.bus_BUS_NUMBER_school_pickup') -%}
+              {%- set s_hd = states('sensor.bus_BUS_NUMBER_home_dropoff') -%}
+              {%- set a_hp = states('sensor.bus_BUS_NUMBER_home_pickup_actual') -%}
+              {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
+              {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
+              {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
+              <table width="100%">
+              <tr>
+                <th align="left" width="34%">&nbsp;</th>
+                <th align="center" width="33%">Scheduled</th>
+                <th align="center" width="33%">Actual</th>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
+                <td align="center">{{ fmt(s_hp) }}</td>
+                <td align="center">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
+                <td align="center">{{ fmt(s_sd) }}</td>
+                <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
+                <td align="center">{{ fmt(s_sp) }}</td>
+                <td align="center">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
+                <td align="center">{{ fmt(s_hd) }}</td>
+                <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
+              </tr>
+              </table>
+            # ── card_mod users ──────────────────────────────────────────────
+            # Adds borders + padding to the 12 data cells only, and fixes
+            # th alignment (HA markdown CSS overrides align= on th to left).
+            # Requires the card_mod HACS frontend resource.
+            #
+            # ha-markdown$ pierces ha-markdown's shadow DOM.
+            #
+            # --markdown-table-border-* are zeroed on ha-markdown-element to
+            # suppress the constructed stylesheet's default row lines at
+            # source, avoiding an !important fight. Borders are then
+            # selectively re-added only to td:not([colspan]) — the 4 data
+            # rows, 3 cells each. The rgba fallback ensures the border is
+            # always visible if --divider-color doesn't resolve in scope.
+            #card_mod:
+            #  style:
+            #    ha-markdown$: |
+            #      ha-markdown-element {
+            #        --markdown-table-border-width: 0;
+            #        --markdown-table-border-style: none;
+            #      }
+            #      table {
+            #        border-collapse: collapse;
+            #      }
+            #      table th {
+            #        text-align: center;
+            #      }
+            #      table th:first-child {
+            #        text-align: left;
+            #      }
+            #      table td:not([colspan]) {
+            #        border: 1px solid var(--divider-color, rgba(255,255,255,0.15)) !important;
+            #        padding: 4px 8px !important;
+            #      }
 
       # ── Add additional buses below ─────────────────────────────────────────
-      # - type: horizontal-stack
+      # - type: vertical-stack
       #   cards:
       #     - type: map
       #       ...
