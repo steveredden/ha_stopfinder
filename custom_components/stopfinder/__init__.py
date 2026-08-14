@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     STOP_RADIUS_M,
+    STOP_TIME_GUARD_MIN,
 )
 from .coordinator import StopfinderCoordinator
 
@@ -96,21 +97,28 @@ def _setup_stop_detection(
 
             if bd.active_trip == "morning":
                 candidates = [
-                    ("home_pickup",    bd.home_pickup_stop),
-                    ("school_dropoff", bd.school_dropoff_stop),
+                    ("home_pickup",    bd.home_pickup_stop,    bd.home_pickup),
+                    ("school_dropoff", bd.school_dropoff_stop, bd.school_dropoff),
                 ]
             elif bd.active_trip == "afternoon":
                 candidates = [
-                    ("school_pickup", bd.school_pickup_stop),
-                    ("home_dropoff",  bd.home_dropoff_stop),
+                    ("school_pickup", bd.school_pickup_stop, bd.school_pickup),
+                    ("home_dropoff",  bd.home_dropoff_stop,  bd.home_dropoff),
                 ]
             else:
                 prev_stop[bus_key] = None
                 continue
 
+            now = dt_util.now()
+            guard = timedelta(minutes=STOP_TIME_GUARD_MIN)
+
             current_stop: str | None = None
-            for stop_key, coords in candidates:
+            for stop_key, coords, scheduled_time in candidates:
                 if coords is None:
+                    continue
+                # Skip if we're more than STOP_TIME_GUARD_MIN before the
+                # scheduled time — the bus is likely on a different run.
+                if scheduled_time and now < scheduled_time - guard:
                     continue
                 slat, slon = coords
                 if haversine_m(bd.latitude, bd.longitude, slat, slon) <= STOP_RADIUS_M:

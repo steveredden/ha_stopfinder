@@ -18,6 +18,12 @@ DEFAULT_POLL_INTERVAL = 5   # seconds, used inside tracking windows
 # Radius (metres) used for Haversine proximity check against API stop coordinates.
 STOP_RADIUS_M = 100
 
+# A stop arrival is only stamped when the current time is within this many
+# minutes of the scheduled stop time.  Prevents an earlier bus run to the
+# same coordinates (e.g. early-dismissal middle school) from being counted
+# as this student's trip event.
+STOP_TIME_GUARD_MIN = 30
+
 PLATFORMS = ["device_tracker", "sensor"]
 
 # Icons per trip-point
