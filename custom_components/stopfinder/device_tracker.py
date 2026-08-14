@@ -66,7 +66,6 @@ class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
             return {"bus_number": self._bus_key}
         return {
             "bus_number":      bd.bus_number,
-            "schedule_type":   bd.schedule_type,
             "tracking_active": bd.tracking_active,
             "active_trip":     bd.active_trip,
         }

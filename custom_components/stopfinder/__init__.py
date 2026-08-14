@@ -11,10 +11,9 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.location import distance as haversine_m
 
 from .const import (
-    CONF_ZONE_NEIGHBORHOOD,
-    CONF_ZONE_SCHOOL,
     DOMAIN,
     PLATFORMS,
+    STOP_RADIUS_M,
 )
 from .coordinator import StopfinderCoordinator
 
@@ -33,11 +32,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
-    # GPS-based zone detection — runs on every coordinator update.
-    # Avoids the entity-registry timing race that the previous approach suffered:
-    # async_add_entities schedules registration as a task, so the entity_id lookup
-    # immediately after async_forward_entry_setups can return None and silently bail.
-    _setup_gps_zone_detection(hass, config_entry, coordinator)
+    # GPS-based stop proximity detection — runs on every coordinator update.
+    # Uses the bus stop coordinates returned by the API so no user zone
+    # configuration is required.
+    _setup_stop_detection(hass, config_entry, coordinator)
 
     _schedule_daily_reset(hass, config_entry)
 
@@ -63,27 +61,23 @@ async def _async_options_updated(
 
 
 # ---------------------------------------------------------------------------
-# GPS-based zone detection
+# Stop proximity detection
 # ---------------------------------------------------------------------------
 
-def _setup_gps_zone_detection(
+def _setup_stop_detection(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
     coordinator: StopfinderCoordinator,
 ) -> None:
-    """Subscribe to coordinator updates and detect zone entry from raw GPS.
+    """Subscribe to coordinator updates and stamp actual-time sensors when the
+    bus GPS enters the radius of a scheduled stop.
 
-    For each bus with active GPS, compute the distance to each configured zone
-    center.  When the bus crosses inside a zone it wasn't in on the previous
-    poll, stamp the matching actual-time sensor.
-
-    Using GPS + Haversine rather than watching device_tracker state changes
-    avoids a race condition: async_add_entities schedules entity registration as
-    a future task, so the entity may not be in the registry when we try to
-    subscribe immediately after async_forward_entry_setups.
+    Stop coordinates come directly from the API (pickUpStop*/dropOffStop*), so
+    no user zone configuration is needed.  Detection uses a Haversine check
+    rather than HA zone state changes to avoid the entity-registry timing race.
     """
-    entry_id  = config_entry.entry_id
-    prev_zone: dict[str, str | None] = {}   # bus_key → zone_entity_id or None
+    entry_id   = config_entry.entry_id
+    prev_stop: dict[str, str | None] = {}   # bus_key → stop_key or None
 
     @callback
     def _on_coordinator_update() -> None:
@@ -91,63 +85,48 @@ def _setup_gps_zone_detection(
         if not data:
             return
 
-        zone_nbhd   = config_entry.options.get(CONF_ZONE_NEIGHBORHOOD)
-        zone_school  = config_entry.options.get(CONF_ZONE_SCHOOL)
-        zones_to_check = [(zone_nbhd, "neighborhood"), (zone_school, "school")]
-        zones_to_check = [(eid, role) for eid, role in zones_to_check if eid]
-
-        if not zones_to_check:
-            return
-
         actual_sensors_all = (
             hass.data.get(DOMAIN, {}).get(entry_id, {}).get("actual_sensors", {})
         )
 
         for bus_key, bd in data.items():
-            # Only check during an active tracking window with live GPS
             if not bd.tracking_active or bd.latitude is None or bd.longitude is None:
-                prev_zone[bus_key] = None
+                prev_stop[bus_key] = None
                 continue
 
-            current_zone: str | None = None
-            for zone_eid, _ in zones_to_check:
-                zs = hass.states.get(zone_eid)
-                if not zs:
+            if bd.active_trip == "morning":
+                candidates = [
+                    ("home_pickup",    bd.home_pickup_stop),
+                    ("school_dropoff", bd.school_dropoff_stop),
+                ]
+            elif bd.active_trip == "afternoon":
+                candidates = [
+                    ("school_pickup", bd.school_pickup_stop),
+                    ("home_dropoff",  bd.home_dropoff_stop),
+                ]
+            else:
+                prev_stop[bus_key] = None
+                continue
+
+            current_stop: str | None = None
+            for stop_key, coords in candidates:
+                if coords is None:
                     continue
-                zlat = zs.attributes.get("latitude")
-                zlon = zs.attributes.get("longitude")
-                zrad = zs.attributes.get("radius", 100)   # metres, HA default 100
-                if zlat is None or zlon is None:
-                    continue
-                if haversine_m(bd.latitude, bd.longitude, zlat, zlon) <= zrad:
-                    current_zone = zone_eid
+                slat, slon = coords
+                if haversine_m(bd.latitude, bd.longitude, slat, slon) <= STOP_RADIUS_M:
+                    current_stop = stop_key
                     break
 
-            last_zone = prev_zone.get(bus_key)
-            prev_zone[bus_key] = current_zone
+            last_stop = prev_stop.get(bus_key)
+            prev_stop[bus_key] = current_stop
 
-            # Only act on a fresh zone entry (not already inside the same zone)
-            if current_zone is None or current_zone == last_zone:
-                continue
-
-            actual_sensors = actual_sensors_all.get(bus_key, {})
-            now = dt_util.now()
-
-            _LOGGER.debug(
-                "Bus %s entered zone %s (trip=%s)", bus_key, current_zone, bd.active_trip
-            )
-
-            if current_zone == zone_nbhd:
-                if bd.active_trip == "morning":
-                    _stamp(actual_sensors, "home_pickup", now)
-                elif bd.active_trip == "afternoon":
-                    _stamp(actual_sensors, "home_dropoff", now)
-
-            elif current_zone == zone_school:
-                if bd.active_trip == "morning":
-                    _stamp(actual_sensors, "school_dropoff", now)
-                elif bd.active_trip == "afternoon":
-                    _stamp(actual_sensors, "school_pickup", now)
+            if current_stop and current_stop != last_stop:
+                actual_sensors = actual_sensors_all.get(bus_key, {})
+                _LOGGER.debug(
+                    "Bus %s arrived at stop %s (trip=%s)",
+                    bus_key, current_stop, bd.active_trip,
+                )
+                _stamp(actual_sensors, current_stop, dt_util.now())
 
     config_entry.async_on_unload(
         coordinator.async_add_listener(_on_coordinator_update)

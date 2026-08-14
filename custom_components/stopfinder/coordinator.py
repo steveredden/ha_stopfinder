@@ -19,33 +19,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    _CONF_MINUTES_AFTER_LEGACY,
-    _CONF_MINUTES_BEFORE_LEGACY,
     API_BASE,
-    CONF_EARLY_HOUR,
-    CONF_HALFDAY_HOUR,
-    CONF_MINUTES_AFTER_HOME_DROPOFF,
-    CONF_MINUTES_AFTER_SCHOOL_DROPOFF,
-    CONF_MINUTES_BEFORE_HOME_PICKUP,
-    CONF_MINUTES_BEFORE_SCHOOL_PICKUP,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_USER_AGENT,
     CONF_USERNAME,
-    CONF_ZONE_NEIGHBORHOOD,
-    CONF_ZONE_SCHOOL,
-    DEFAULT_MINUTES_AFTER_HOME_DROPOFF,
-    DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF,
-    DEFAULT_MINUTES_BEFORE_HOME_PICKUP,
-    DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_USER_AGENT,
     DOMAIN,
-    EARLY_THRESHOLD_HOUR,
-    HALFDAY_THRESHOLD_HOUR,
-    SCHEDULE_EARLY,
-    SCHEDULE_HALFDAY,
-    SCHEDULE_NORMAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -66,13 +47,24 @@ class BusData:
     client_id: str = ""
     data_source_id: str = ""
 
-    # Scheduled times (API value + adjustMinutes, localised)
+    # Scheduled stop times (API value + adjustMinutes, localised)
     home_pickup:    datetime | None = None
     school_dropoff: datetime | None = None
     school_pickup:  datetime | None = None
     home_dropoff:   datetime | None = None
 
-    schedule_type:   str = SCHEDULE_NORMAL
+    # Tracking windows derived from startTime/finishTime ± beforeTrip/afterTrip
+    morning_window_start:   datetime | None = None
+    morning_window_end:     datetime | None = None
+    afternoon_window_start: datetime | None = None
+    afternoon_window_end:   datetime | None = None
+
+    # Bus stop coordinates (lat, lon) for automatic arrival detection
+    home_pickup_stop:    tuple[float, float] | None = None
+    school_dropoff_stop: tuple[float, float] | None = None
+    school_pickup_stop:  tuple[float, float] | None = None
+    home_dropoff_stop:   tuple[float, float] | None = None
+
     latitude:        float | None = None
     longitude:       float | None = None
     tracking_active: bool = False
@@ -125,9 +117,6 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         return self._config_entry.options.get(
             key, self._config_entry.data.get(key, default)
         )
-
-    def _edge(self, new_key: str, legacy_key: str, default: int) -> int:
-        return int(self._opt(new_key, self._opt(legacy_key, default)))
 
     def _session_headers(self) -> dict[str, str]:
         ua = self._config_entry.data.get(CONF_USER_AGENT, DEFAULT_USER_AGENT)
@@ -185,8 +174,6 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         so each route gets its own device.
         """
         buses: dict[str, BusData] = {}
-        halfday_h = int(self._opt(CONF_HALFDAY_HOUR, HALFDAY_THRESHOLD_HOUR))
-        early_h   = int(self._opt(CONF_EARLY_HOUR,   EARLY_THRESHOLD_HOUR))
 
         def _adjust(time_str: str | None, adj: int | None) -> datetime | None:
             if not time_str:
@@ -194,6 +181,14 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
             naive    = datetime.fromisoformat(time_str.replace("T", " "))
             adjusted = naive + timedelta(minutes=int(adj or 0))
             return dt_util.as_local(adjusted)
+
+        def _stop(t: dict, y_key: str, x_key: str) -> tuple[float, float] | None:
+            """Return (lat, lon) from a trip's stop coordinates, or None."""
+            lat = t.get(y_key)
+            lon = t.get(x_key)
+            if lat is None or lon is None:
+                return None
+            return (float(lat), float(lon))
 
         def _key_for(bus_no: str, client_id: str) -> str:
             """Return existing key if same bus, else a suffixed key for a collision."""
@@ -207,12 +202,16 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         def _merge_trip(
             t: dict, client_id: str, data_source_id: str,
             guard_attr: str, pickup_attr: str, dropoff_attr: str,
+            pickup_stop_attr: str, dropoff_stop_attr: str,
+            window_start_attr: str, window_end_attr: str,
+            before_min: int, after_min: int,
         ) -> str | None:
-            """Merge one trip's pickup/dropoff into its bus; return the bus key.
+            """Merge one trip into its bus entry; return the bus key.
 
-            The guard attribute keeps the first schedule to claim this bus (e.g.
-            siblings on the same route) authoritative — later schedules don't
-            overwrite times already set.  Returns None when the trip has no bus.
+            The guard attribute keeps the first schedule to claim this bus
+            authoritative — later schedules (e.g. siblings on the same route)
+            don't overwrite times already set.  Returns None when the trip has
+            no bus number.
             """
             bus_no = t.get("busNumber", "")
             if not bus_no:
@@ -226,9 +225,19 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
             if getattr(bd, guard_attr) is None:
                 setattr(bd, pickup_attr,  _adjust(t.get("pickUpTime"),  t.get("adjustMinutes")))
                 setattr(bd, dropoff_attr, _adjust(t.get("dropOffTime"), t.get("adjustMinutes")))
+                setattr(bd, pickup_stop_attr,  _stop(t, "pickUpStopYCoord",  "pickUpStopXCoord"))
+                setattr(bd, dropoff_stop_attr, _stop(t, "dropOffStopYCoord", "dropOffStopXCoord"))
+                start  = _adjust(t.get("startTime"),  0)
+                finish = _adjust(t.get("finishTime"), 0)
+                if start and finish:
+                    setattr(bd, window_start_attr, start  - timedelta(minutes=before_min))
+                    setattr(bd, window_end_attr,   finish + timedelta(minutes=after_min))
             return key
 
         for student in raw:
+            before_min = int(student.get("beforeTrip", 0))
+            after_min  = int(student.get("afterTrip",  0))
+
             for schedule in student.get("studentSchedules", []):
                 client_id      = schedule.get("clientId", "")
                 data_source_id = schedule.get("dataSourceId", "")
@@ -238,20 +247,25 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
 
                 # Morning trip
                 if to_school:
-                    _merge_trip(to_school[0], client_id, data_source_id,
-                                "home_pickup", "home_pickup", "school_dropoff")
+                    _merge_trip(
+                        to_school[0], client_id, data_source_id,
+                        guard_attr="home_pickup",
+                        pickup_attr="home_pickup",    dropoff_attr="school_dropoff",
+                        pickup_stop_attr="home_pickup_stop", dropoff_stop_attr="school_dropoff_stop",
+                        window_start_attr="morning_window_start", window_end_attr="morning_window_end",
+                        before_min=before_min, after_min=after_min,
+                    )
 
                 # Afternoon trip (may be a different bus)
                 if from_school:
-                    key = _merge_trip(from_school[0], client_id, data_source_id,
-                                      "school_pickup", "school_pickup", "home_dropoff")
-                    if key is not None:
-                        sp = buses[key].school_pickup
-                        if sp and buses[key].schedule_type == SCHEDULE_NORMAL:
-                            if sp.hour < halfday_h:
-                                buses[key].schedule_type = SCHEDULE_HALFDAY
-                            elif sp.hour < early_h:
-                                buses[key].schedule_type = SCHEDULE_EARLY
+                    _merge_trip(
+                        from_school[0], client_id, data_source_id,
+                        guard_attr="school_pickup",
+                        pickup_attr="school_pickup",  dropoff_attr="home_dropoff",
+                        pickup_stop_attr="school_pickup_stop", dropoff_stop_attr="home_dropoff_stop",
+                        window_start_attr="afternoon_window_start", window_end_attr="afternoon_window_end",
+                        before_min=before_min, after_min=after_min,
+                    )
 
         return buses
 
@@ -276,38 +290,28 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
     def _tracking_window(self, bd: BusData, bus_key: str) -> tuple[bool, str | None]:
         """Return (in_window, trip_type) for the current time and this bus.
 
-        If zones are configured and the bus hasn't been detected in the expected
-        zone yet, the window is extended up to _EXTEND_HOURS past the nominal
-        close so that late buses remain visible.
+        Windows come directly from the API's startTime/finishTime ± the API's
+        own beforeTrip/afterTrip offsets.  If the bus hasn't been detected at
+        the final stop yet, the window is extended up to _EXTEND_HOURS past the
+        nominal close so severely late buses remain visible.
         """
-        now  = dt_util.now()
-        e1   = self._edge(CONF_MINUTES_BEFORE_HOME_PICKUP,   _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_HOME_PICKUP)
-        e2   = self._edge(CONF_MINUTES_AFTER_SCHOOL_DROPOFF, _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF)
-        e3   = self._edge(CONF_MINUTES_BEFORE_SCHOOL_PICKUP, _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP)
-        e4   = self._edge(CONF_MINUTES_AFTER_HOME_DROPOFF,   _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_HOME_DROPOFF)
+        now = dt_util.now()
 
-        opts = self._config_entry.options
-        zones_active = bool(opts.get(CONF_ZONE_NEIGHBORHOOD) or opts.get(CONF_ZONE_SCHOOL))
-
-        # Morning : home_pickup − e1  →  school_dropoff + e2
-        if bd.home_pickup and bd.school_dropoff:
-            if bd.home_pickup - timedelta(minutes=e1) <= now <= bd.school_dropoff + timedelta(minutes=e2):
+        # Morning : morning_window_start → morning_window_end
+        if bd.morning_window_start and bd.morning_window_end:
+            if bd.morning_window_start <= now <= bd.morning_window_end:
                 return True, "morning"
-            # Extend: zones configured, past nominal close, arrival not yet detected
-            if (zones_active
-                    and now > bd.school_dropoff + timedelta(minutes=e2)
-                    and now <= bd.school_dropoff + timedelta(hours=_EXTEND_HOURS)
+            if (now > bd.morning_window_end
+                    and now <= bd.morning_window_end + timedelta(hours=_EXTEND_HOURS)
                     and not self._arrival_recorded(bus_key, "school_dropoff")):
                 return True, "morning"
 
-        # Afternoon : school_pickup − e3  →  home_dropoff + e4
-        if bd.school_pickup and bd.home_dropoff:
-            if bd.school_pickup - timedelta(minutes=e3) <= now <= bd.home_dropoff + timedelta(minutes=e4):
+        # Afternoon : afternoon_window_start → afternoon_window_end
+        if bd.afternoon_window_start and bd.afternoon_window_end:
+            if bd.afternoon_window_start <= now <= bd.afternoon_window_end:
                 return True, "afternoon"
-            # Extend: zones configured, past nominal close, arrival not yet detected
-            if (zones_active
-                    and now > bd.home_dropoff + timedelta(minutes=e4)
-                    and now <= bd.home_dropoff + timedelta(hours=_EXTEND_HOURS)
+            if (now > bd.afternoon_window_end
+                    and now <= bd.afternoon_window_end + timedelta(hours=_EXTEND_HOURS)
                     and not self._arrival_recorded(bus_key, "home_dropoff")):
                 return True, "afternoon"
 

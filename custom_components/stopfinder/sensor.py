@@ -1,4 +1,4 @@
-"""Stopfinder sensor platform – scheduled/actual times and schedule type, one set per bus."""
+"""Stopfinder sensor platform – scheduled/actual times, one set per bus."""
 from __future__ import annotations
 
 import logging
@@ -14,9 +14,6 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
-    SCHEDULE_EARLY,
-    SCHEDULE_HALFDAY,
-    SCHEDULE_NORMAL,
     TRIP_ACTUAL_ICONS,
     TRIP_ICONS,
 )
@@ -52,7 +49,6 @@ async def async_setup_entry(
             actuals[trip_point] = actual
             entities.append(actual)
 
-        entities.append(ScheduleTypeSensor(coordinator, config_entry, bus_key))
         actual_sensors_by_bus[bus_key] = actuals
         return entities
 
@@ -139,41 +135,3 @@ class ActualTimeSensor(StopfinderBusEntity, SensorEntity, RestoreEntity):
     def reset(self) -> None:
         self._actual_time = None
         self.async_write_ha_state()
-
-
-# ---------------------------------------------------------------------------
-# Schedule-type sensor
-# ---------------------------------------------------------------------------
-
-class ScheduleTypeSensor(StopfinderBusEntity, SensorEntity):
-    """Indicates normal / early / halfday for this bus's route."""
-
-    _attr_name              = "Schedule Type"
-    _attr_icon              = "mdi:calendar-clock"
-    _attr_device_class      = SensorDeviceClass.ENUM
-    _attr_options           = [SCHEDULE_NORMAL, SCHEDULE_EARLY, SCHEDULE_HALFDAY]
-    _attr_translation_key   = "schedule_type"
-
-    def __init__(
-        self,
-        coordinator: StopfinderCoordinator,
-        config_entry: ConfigEntry,
-        bus_key: str,
-    ) -> None:
-        super().__init__(coordinator, config_entry, bus_key)
-        self._attr_unique_id = f"{config_entry.entry_id}_schedule_type_{bus_key}"
-
-    @property
-    def native_value(self) -> str | None:
-        bd = self._bus_data
-        return bd.schedule_type if bd else None
-
-    @property
-    def extra_state_attributes(self) -> dict:
-        bd = self._bus_data
-        if not bd:
-            return {}
-        return {
-            "tracking_active": bd.tracking_active,
-            "active_trip":     bd.active_trip,
-        }

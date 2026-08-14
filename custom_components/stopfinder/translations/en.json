@@ -15,31 +15,18 @@
       },
       "preferences": {
         "title": "Tracking Preferences",
-        "description": "GPS is fetched only within the active tracking windows. Scheduled times are always visible. Bus devices are created automatically when the first school-day schedule is fetched.",
+        "description": "Tracking windows and stop detection are derived automatically from the API schedule. Bus devices are created when the first school-day schedule is fetched.",
         "data": {
-          "poll_interval": "Poll Interval (inside window)",
-          "minutes_before_home_pickup": "Before Home Pickup",
-          "minutes_after_school_dropoff": "After School Dropoff",
-          "minutes_before_school_pickup": "Before School Pickup",
-          "minutes_after_home_dropoff": "After Home Dropoff",
-          "halfday_hour": "Half-Day Threshold (hour)",
-          "early_hour": "Early Release Threshold (hour)"
+          "poll_interval": "Poll Interval (inside window)"
         },
         "data_description": {
-          "poll_interval": "How often to fetch GPS while a tracking window is active. Outside windows, the coordinator runs hourly to keep the schedule fresh.",
-          "minutes_before_home_pickup": "Morning window opens this many minutes before the scheduled home pickup",
-          "minutes_after_school_dropoff": "Morning window closes this many minutes after the scheduled school dropoff",
-          "minutes_before_school_pickup": "Afternoon window opens this many minutes before the scheduled school pickup",
-          "minutes_after_home_dropoff": "Afternoon window closes this many minutes after the scheduled home dropoff",
-          "halfday_hour": "School pickup before this hour (24h) = Half Day. Default: 13 (1:00 PM)",
-          "early_hour": "School pickup before this hour (24h) = Early Release. Default: 14 (2:00 PM). Must be greater than Half-Day threshold."
+          "poll_interval": "How often to fetch GPS while a tracking window is active. Outside windows, the coordinator runs hourly to keep the schedule fresh."
         }
       }
     },
     "error": {
       "invalid_auth": "Invalid email address or password.",
       "cannot_connect": "Unable to reach the Stopfinder API. Check your internet connection.",
-      "invalid_thresholds": "Early Release hour must be greater than the Half-Day hour.",
       "unknown": "An unexpected error occurred. Check the Home Assistant logs."
     },
     "abort": {
@@ -51,40 +38,10 @@
       "init": {
         "title": "Stopfinder Options",
         "data": {
-          "poll_interval": "Poll Interval (inside window)",
-          "minutes_before_home_pickup": "Before Home Pickup",
-          "minutes_after_school_dropoff": "After School Dropoff",
-          "minutes_before_school_pickup": "Before School Pickup",
-          "minutes_after_home_dropoff": "After Home Dropoff",
-          "halfday_hour": "Half-Day Threshold (hour)",
-          "early_hour": "Early Release Threshold (hour)",
-          "zone_neighborhood": "Neighborhood / Pickup Zone",
-          "zone_school": "School Zone"
+          "poll_interval": "Poll Interval (inside window)"
         },
         "data_description": {
-          "poll_interval": "How often to fetch GPS while a tracking window is active (seconds)",
-          "minutes_before_home_pickup": "Morning window opens this many minutes before the scheduled home pickup",
-          "minutes_after_school_dropoff": "Morning window closes this many minutes after the scheduled school dropoff",
-          "minutes_before_school_pickup": "Afternoon window opens this many minutes before the scheduled school pickup",
-          "minutes_after_home_dropoff": "Afternoon window closes this many minutes after the scheduled home dropoff",
-          "halfday_hour": "School pickup before this hour (24h) = Half Day. Default: 13 (1:00 PM)",
-          "early_hour": "School pickup before this hour (24h) = Early Release. Default: 14 (2:00 PM). Must be > Half-Day threshold.",
-          "zone_neighborhood": "Optional – HA zone at the neighborhood stop. Stamps Home Pickup Actual (morning) or Home Dropoff Actual (afternoon) automatically.",
-          "zone_school": "Optional – HA zone at the school. Stamps School Dropoff Actual (morning) or School Pickup Actual (afternoon)."
-        }
-      }
-    },
-    "error": {
-      "invalid_thresholds": "Early Release hour must be greater than the Half-Day hour."
-    }
-  },
-  "entity": {
-    "sensor": {
-      "schedule_type": {
-        "state": {
-          "normal": "Normal",
-          "early": "Early Release",
-          "halfday": "Half Day"
+          "poll_interval": "How often to fetch GPS while a tracking window is active (seconds)."
         }
       }
     }
