@@ -65,7 +65,7 @@ views:
               {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
               {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
               {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
-              <table width="100%">
+              <table width="100%" style="border-collapse: collapse">
               <tr>
                 <th align="left" width="45%">&nbsp;</th>
                 <th align="right" width="22%">Sched</th>
@@ -73,25 +73,25 @@ views:
               </tr>
               <tr><td colspan="3"><b>Morning</b>{{ dur(a_hp, a_sd) }}</td></tr>
               <tr>
-                <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
-                <td align="right">{{ fmt(s_hp) }}</td>
-                <td>{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px"><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
+                <td align="right" style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(s_hp) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
               </tr>
               <tr>
-                <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
-                <td align="right">{{ fmt(s_sd) }}</td>
-                <td>{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px"><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
+                <td align="right" style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(s_sd) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
               </tr>
               <tr><td colspan="3"><br><b>Afternoon</b>{{ dur(a_sp, a_hd) }}</td></tr>
               <tr>
-                <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
-                <td align="right">{{ fmt(s_sp) }}</td>
-                <td>{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px"><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
+                <td align="right" style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(s_sp) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
               </tr>
               <tr>
-                <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
-                <td align="right">{{ fmt(s_hd) }}</td>
-                <td>{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px"><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
+                <td align="right" style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(s_hd) }}</td>
+                <td style="border: 1px solid var(--divider-color); padding: 4px 8px">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
 
