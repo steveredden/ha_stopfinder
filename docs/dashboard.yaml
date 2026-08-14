@@ -103,26 +103,33 @@ views:
             # Adds borders + padding to the 12 data cells only.
             # Requires the card_mod HACS frontend resource.
             #
-            # ha-markdown$ pierces ha-markdown's shadow DOM where the
-            # rendered HTML lives.
+            # ha-markdown$ pierces ha-markdown's shadow DOM.
             #
-            # Two-step approach:
-            #   1. Reset HA's default td border-bottom on all cells.
-            #   2. Re-add a full border only on td:not([colspan]) —
-            #      the section title rows use colspan="3", so this
-            #      selector hits exactly the 12 data cells.
-            # !important overrides HA's base table styles.
+            # Three-step approach:
+            #   1. Zero out HA's --markdown-table-border-* custom properties
+            #      on ha-markdown-element. These drive the constructed
+            #      stylesheet (constructed:1 in DevTools) that adds the
+            #      default row lines — setting them to 0/none removes all
+            #      default table borders cleanly.
+            #   2. Re-add a full border only on td:not([colspan]).
+            #      Section title rows use colspan="3", so this selector
+            #      targets exactly the 12 data cells.
+            #   3. Use a concrete fallback color alongside var(--divider-color)
+            #      because the variable may not resolve inside the shadow
+            #      scope (shown as ?= in DevTools), causing the entire
+            #      border shorthand to silently become invalid.
             #card_mod:
             #  style:
             #    ha-markdown$: |
+            #      ha-markdown-element {
+            #        --markdown-table-border-width: 0;
+            #        --markdown-table-border-style: none;
+            #      }
             #      table {
             #        border-collapse: collapse;
             #      }
-            #      table td, table th {
-            #        border-bottom: none !important;
-            #      }
             #      table td:not([colspan]) {
-            #        border: 1px solid var(--divider-color) !important;
+            #        border: 1px solid var(--divider-color, rgba(255,255,255,0.15)) !important;
             #        padding: 4px 8px !important;
             #      }
 
