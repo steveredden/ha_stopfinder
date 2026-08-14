@@ -57,15 +57,15 @@ views:
 
               | | Sched | Actual |
               |:--|--:|:--|
-              | 🏠 Pickup | {{ fmt(s_hp) }} | {{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }} |
-              | 🏫 Dropoff | {{ fmt(s_sd) }} | {{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }} |
+              | <ha-icon icon="mdi:home"></ha-icon> Pickup | {{ fmt(s_hp) }} | {{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }} |
+              | <ha-icon icon="mdi:school"></ha-icon> Dropoff | {{ fmt(s_sd) }} | {{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }} |
 
               **Afternoon**{{ dur(a_sp, a_hd) }}
 
               | | Sched | Actual |
               |:--|--:|:--|
-              | 🏫 Pickup | {{ fmt(s_sp) }} | {{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }} |
-              | 🏠 Dropoff | {{ fmt(s_hd) }} | {{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }} |
+              | <ha-icon icon="mdi:school"></ha-icon> Pickup | {{ fmt(s_sp) }} | {{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }} |
+              | <ha-icon icon="mdi:home"></ha-icon> Dropoff | {{ fmt(s_hd) }} | {{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }} |
 
       # ── Add additional buses below ─────────────────────────────────────────
       # - type: vertical-stack
