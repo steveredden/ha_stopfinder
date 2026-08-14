@@ -7,6 +7,7 @@ CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 CONF_USER_AGENT = "user_agent"
 CONF_POLL_INTERVAL = "poll_interval"
+CONF_MINUTES_BEFORE = "minutes_before"
 
 # API
 API_BASE = "https://stopfinderapi.transfinder.com/StopfinderAPI"
@@ -14,6 +15,7 @@ API_BASE = "https://stopfinderapi.transfinder.com/StopfinderAPI"
 # Defaults
 DEFAULT_USER_AGENT = "Stopfinder/1.0 HomeAssistant"
 DEFAULT_POLL_INTERVAL = 5   # seconds, used inside tracking windows
+DEFAULT_MINUTES_BEFORE = 5  # extra minutes before API startTime to begin tracking
 
 # Radius (metres) used for Haversine proximity check against API stop coordinates.
 STOP_RADIUS_M = 100

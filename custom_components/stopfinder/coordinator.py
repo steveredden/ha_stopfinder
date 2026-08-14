@@ -20,10 +20,12 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     API_BASE,
+    CONF_MINUTES_BEFORE,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_USER_AGENT,
     CONF_USERNAME,
+    DEFAULT_MINUTES_BEFORE,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_USER_AGENT,
     DOMAIN,
@@ -59,11 +61,15 @@ class BusData:
     afternoon_window_start: datetime | None = None
     afternoon_window_end:   datetime | None = None
 
-    # Bus stop coordinates (lat, lon) for automatic arrival detection
-    home_pickup_stop:    tuple[float, float] | None = None
-    school_dropoff_stop: tuple[float, float] | None = None
-    school_pickup_stop:  tuple[float, float] | None = None
-    home_dropoff_stop:   tuple[float, float] | None = None
+    # Bus stop coordinates (lat, lon) and display names for arrival detection
+    home_pickup_stop:         tuple[float, float] | None = None
+    school_dropoff_stop:      tuple[float, float] | None = None
+    school_pickup_stop:       tuple[float, float] | None = None
+    home_dropoff_stop:        tuple[float, float] | None = None
+    home_pickup_stop_name:    str | None = None
+    school_dropoff_stop_name: str | None = None
+    school_pickup_stop_name:  str | None = None
+    home_dropoff_stop_name:   str | None = None
 
     latitude:        float | None = None
     longitude:       float | None = None
@@ -225,8 +231,10 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
             if getattr(bd, guard_attr) is None:
                 setattr(bd, pickup_attr,  _adjust(t.get("pickUpTime"),  t.get("adjustMinutes")))
                 setattr(bd, dropoff_attr, _adjust(t.get("dropOffTime"), t.get("adjustMinutes")))
-                setattr(bd, pickup_stop_attr,  _stop(t, "pickUpStopYCoord",  "pickUpStopXCoord"))
-                setattr(bd, dropoff_stop_attr, _stop(t, "dropOffStopYCoord", "dropOffStopXCoord"))
+                setattr(bd, pickup_stop_attr,           _stop(t, "pickUpStopYCoord",  "pickUpStopXCoord"))
+                setattr(bd, dropoff_stop_attr,          _stop(t, "dropOffStopYCoord", "dropOffStopXCoord"))
+                setattr(bd, pickup_stop_attr  + "_name", t.get("pickUpStopName"))
+                setattr(bd, dropoff_stop_attr + "_name", t.get("dropOffStopName"))
                 start  = _adjust(t.get("startTime"),  0)
                 finish = _adjust(t.get("finishTime"), 0)
                 if start and finish:
@@ -234,8 +242,14 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                     setattr(bd, window_end_attr,   finish + timedelta(minutes=after_min))
             return key
 
+        cfg = self.config_entry
+        extra_before = int(
+            cfg.options.get(CONF_MINUTES_BEFORE,
+            cfg.data.get(CONF_MINUTES_BEFORE, DEFAULT_MINUTES_BEFORE))
+        )
+
         for student in raw:
-            before_min = int(student.get("beforeTrip", 0))
+            before_min = int(student.get("beforeTrip", 0)) + extra_before
             after_min  = int(student.get("afterTrip",  0))
 
             for schedule in student.get("studentSchedules", []):

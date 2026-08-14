@@ -71,6 +71,10 @@ views:
               {%- set mwe = state_attr(dt, 'morning_window_end') -%}
               {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
               {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
+              {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
+              {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
+              {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
+              {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
               {%- set ns = namespace(chip='No active trip', tip='') -%}
               {%- if state_attr(dt, 'tracking_active') -%}
                 {%- set trip = state_attr(dt, 'active_trip') -%}
@@ -83,7 +87,14 @@ views:
               {%- else -%}
                 {%- set ns.tip = 'No tracking scheduled' -%}
               {%- endif -%}
+              {%- if sn_hp or sn_sd -%}
+                {%- set ns.tip = ns.tip ~ ' · Morning: ' ~ (sn_hp or '?') ~ ' → ' ~ (sn_sd or '?') -%}
+              {%- endif -%}
+              {%- if sn_sp or sn_hd -%}
+                {%- set ns.tip = ns.tip ~ ' · Afternoon: ' ~ (sn_sp or '?') ~ ' → ' ~ (sn_hd or '?') -%}
+              {%- endif -%}
               {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
+              <small>{{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }} <abbr title="{{ ns.tip }}"><ha-icon icon="mdi:information-outline"></ha-icon></abbr></small>
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
@@ -111,7 +122,6 @@ views:
                 <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
-              <small><b>{{ ns.chip }}</b> &nbsp;·&nbsp; Last GPS: {{ last_gps }} <abbr title="{{ ns.tip }}">(i)</abbr></small>
             # ── card_mod users ──────────────────────────────────────────────
             # Adds borders + padding to the 12 data cells only, and fixes
             # th alignment (HA markdown CSS overrides align= on th to left).

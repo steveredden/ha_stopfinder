@@ -76,4 +76,8 @@ class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
             "morning_window_end":      _iso(bd.morning_window_end),
             "afternoon_window_start":  _iso(bd.afternoon_window_start),
             "afternoon_window_end":    _iso(bd.afternoon_window_end),
+            "home_pickup_stop_name":    bd.home_pickup_stop_name,
+            "school_dropoff_stop_name": bd.school_dropoff_stop_name,
+            "school_pickup_stop_name":  bd.school_pickup_stop_name,
+            "home_dropoff_stop_name":   bd.home_dropoff_stop_name,
         }

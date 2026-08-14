@@ -13,10 +13,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     API_BASE,
+    CONF_MINUTES_BEFORE,
     CONF_PASSWORD,
     CONF_POLL_INTERVAL,
     CONF_USER_AGENT,
     CONF_USERNAME,
+    DEFAULT_MINUTES_BEFORE,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_USER_AGENT,
     DOMAIN,
@@ -30,6 +32,16 @@ def _poll_selector() -> selector.NumberSelector:
         selector.NumberSelectorConfig(
             min=1, max=300, step=1,
             unit_of_measurement="seconds",
+            mode=selector.NumberSelectorMode.SLIDER,
+        )
+    )
+
+
+def _minutes_before_selector() -> selector.NumberSelector:
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0, max=30, step=1,
+            unit_of_measurement="minutes",
             mode=selector.NumberSelectorMode.SLIDER,
         )
     )
@@ -150,13 +162,15 @@ class StopfinderConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="Stopfinder", data={
                 **self._credentials,
-                CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
+                CONF_POLL_INTERVAL:   user_input[CONF_POLL_INTERVAL],
+                CONF_MINUTES_BEFORE:  user_input[CONF_MINUTES_BEFORE],
             })
 
         return self.async_show_form(
             step_id="preferences",
             data_schema=vol.Schema({
-                vol.Required(CONF_POLL_INTERVAL, default=DEFAULT_POLL_INTERVAL): _poll_selector(),
+                vol.Required(CONF_POLL_INTERVAL,  default=DEFAULT_POLL_INTERVAL):  _poll_selector(),
+                vol.Required(CONF_MINUTES_BEFORE, default=DEFAULT_MINUTES_BEFORE): _minutes_before_selector(),
             }),
         )
 
@@ -183,13 +197,15 @@ class StopfinderOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        current = self.config_entry.options.get(
-            CONF_POLL_INTERVAL,
-            self.config_entry.data.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
-        )
+        def _cur(key, default):
+            return self.config_entry.options.get(
+                key, self.config_entry.data.get(key, default)
+            )
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
-                vol.Required(CONF_POLL_INTERVAL, default=current): _poll_selector(),
+                vol.Required(CONF_POLL_INTERVAL,  default=_cur(CONF_POLL_INTERVAL,  DEFAULT_POLL_INTERVAL)):  _poll_selector(),
+                vol.Required(CONF_MINUTES_BEFORE, default=_cur(CONF_MINUTES_BEFORE, DEFAULT_MINUTES_BEFORE)): _minutes_before_selector(),
             }),
         )

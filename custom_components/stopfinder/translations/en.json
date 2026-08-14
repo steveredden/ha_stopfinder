@@ -17,10 +17,12 @@
         "title": "Tracking Preferences",
         "description": "Tracking windows and stop detection are derived automatically from the API schedule. Bus devices are created when the first school-day schedule is fetched.",
         "data": {
-          "poll_interval": "Poll Interval (inside window)"
+          "poll_interval": "Poll Interval (inside window)",
+          "minutes_before": "Minutes Before Trip"
         },
         "data_description": {
-          "poll_interval": "How often to fetch GPS while a tracking window is active. Outside windows, the coordinator runs hourly to keep the schedule fresh."
+          "poll_interval": "How often to fetch GPS while a tracking window is active. Outside windows, the coordinator runs hourly to keep the schedule fresh.",
+          "minutes_before": "Extra minutes before the API trip start time to begin GPS tracking. Added on top of any buffer the API already provides."
         }
       }
     },
@@ -38,10 +40,12 @@
       "init": {
         "title": "Stopfinder Options",
         "data": {
-          "poll_interval": "Poll Interval (inside window)"
+          "poll_interval": "Poll Interval (inside window)",
+          "minutes_before": "Minutes Before Trip"
         },
         "data_description": {
-          "poll_interval": "How often to fetch GPS while a tracking window is active (seconds)."
+          "poll_interval": "How often to fetch GPS while a tracking window is active (seconds).",
+          "minutes_before": "Extra minutes before the API trip start time to begin GPS tracking."
         }
       }
     }
