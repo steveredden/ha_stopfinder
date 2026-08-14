@@ -27,6 +27,17 @@ views:
             entities:
               - entity: device_tracker.bus_BUS_NUMBER
                 focus: true
+            # ── card_mod users ──────────────────────────────────────────────
+            #card_mod:
+            #  style:
+            #    ha-map$: |
+            #      .leaflet-control-attribution {
+            #        visibility: hidden;
+            #       }
+            #    ha-map $ ha-entity-marker $: |
+            #      .marker {
+            #        background-color: transparent !important;
+            #      }
 
           - type: markdown
             content: |
