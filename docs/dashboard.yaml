@@ -31,19 +31,16 @@ views:
             # ── card_mod users ──────────────────────────────────────────────
             # Requires the card_mod HACS frontend resource.
             # Each key pierces a shadow DOM boundary ($) to reach the target.
+            # --
+            #   Hides the "Leaflet | © OpenStreetMap" attribution bar
+            #   Removes the solid background circle from the bus pin
             #card_mod:
             #  style:
             #    ha-map$: |
-            #      /* Hides the "Leaflet | © OpenStreetMap" attribution bar
-            #         in the bottom-right corner of the map tile. */
             #      .leaflet-control-attribution {
             #        visibility: hidden;
             #      }
             #    ha-map $ ha-entity-marker $: |
-            #      /* Removes the solid background circle from the bus pin,
-            #         leaving just the icon or initials over the map.
-            #         Most useful when entity_picture is set on the tracker —
-            #         without it the initials will float with no background. */
             #      .marker {
             #        background-color: transparent !important;
             #      }
