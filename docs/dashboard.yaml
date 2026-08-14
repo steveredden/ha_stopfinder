@@ -21,12 +21,13 @@ views:
 
           - type: map
             title: Bus BUS_NUMBER
-            hours_to_show: 1
-            default_zoom: 14
+            hours_to_show: 0.5
+            default_zoom: 16
             auto_fit: true
+            fit_zones: true
             entities:
               - entity: device_tracker.bus_BUS_NUMBER
-                focus: true
+              #- entity: zone.home
             # ── card_mod users ──────────────────────────────────────────────
             #card_mod:
             #  style:
@@ -64,19 +65,35 @@ views:
               {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
               {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
               {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
-              **Morning**{{ dur(a_hp, a_sd) }}
-
-              | | Sched | Actual |
-              |:--|--:|:--|
-              | <ha-icon icon="mdi:home"></ha-icon> Pickup | {{ fmt(s_hp) }} | {{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }} |
-              | <ha-icon icon="mdi:school"></ha-icon> Dropoff | {{ fmt(s_sd) }} | {{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }} |
-
-              **Afternoon**{{ dur(a_sp, a_hd) }}
-
-              | | Sched | Actual |
-              |:--|--:|:--|
-              | <ha-icon icon="mdi:school"></ha-icon> Pickup | {{ fmt(s_sp) }} | {{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }} |
-              | <ha-icon icon="mdi:home"></ha-icon> Dropoff | {{ fmt(s_hd) }} | {{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }} |
+              <table width="100%">
+              <tr>
+                <th align="left" width="45%">&nbsp;</th>
+                <th align="right" width="22%">Sched</th>
+                <th align="left" width="33%">Actual</th>
+              </tr>
+              <tr><td colspan="3"><b>Morning</b>{{ dur(a_hp, a_sd) }}</td></tr>
+              <tr>
+                <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
+                <td align="right">{{ fmt(s_hp) }}</td>
+                <td>{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
+                <td align="right">{{ fmt(s_sd) }}</td>
+                <td>{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
+              </tr>
+              <tr><td colspan="3"><br><b>Afternoon</b>{{ dur(a_sp, a_hd) }}</td></tr>
+              <tr>
+                <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
+                <td align="right">{{ fmt(s_sp) }}</td>
+                <td>{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
+              </tr>
+              <tr>
+                <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
+                <td align="right">{{ fmt(s_hd) }}</td>
+                <td>{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
+              </tr>
+              </table>
 
       # ── Add additional buses below ─────────────────────────────────────────
       # - type: vertical-stack
