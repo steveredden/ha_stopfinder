@@ -50,14 +50,7 @@ views:
             content: |
               {%- set time_fmt = '%H:%M' -%}
               {#- Change to '%I:%M %p' for 12-hour format -#}
-              {%- macro fmt(s) -%}
-                {%- if s -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- else -%}—{%- endif -%}
-              {%- endmacro -%}
               {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
-              {%- set mws = state_attr(dt, 'morning_window_start') -%}
-              {%- set mwe = state_attr(dt, 'morning_window_end') -%}
-              {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
-              {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
               {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
               {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
               {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
@@ -68,12 +61,12 @@ views:
                 {%- set ns.chip = ('Morning' if trip == 'morning' else 'Afternoon') ~ ' active' -%}
               {%- endif -%}
               {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
-              {{ ns.chip }} &nbsp;·&nbsp; Last GPS Update: {{ last_gps }}
+              <table width="100%"><tr><td>{{ ns.chip }}</td><td align="right"><small>Last GPS Update: {{ last_gps }}</small></td></tr></table>
 
-              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**{% if mws and mwe %} &nbsp;{{ fmt(mws) }} – {{ fmt(mwe) }}{% endif %}
+              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**
               {% if sn_hp or sn_sd %}<small><ha-icon icon="mdi:home"></ha-icon> {{ sn_hp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:school"></ha-icon> {{ sn_sd or '—' }}</small>{% endif %}
 
-              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**{% if aws and awe %} &nbsp;{{ fmt(aws) }} – {{ fmt(awe) }}{% endif %}
+              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**
               {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
 
           # ── Schedule table ────────────────────────────────────────────────
