@@ -32,6 +32,8 @@ from .const import (
     CONF_POLL_INTERVAL,
     CONF_USER_AGENT,
     CONF_USERNAME,
+    CONF_ZONE_NEIGHBORHOOD,
+    CONF_ZONE_SCHOOL,
     DEFAULT_MINUTES_AFTER_HOME_DROPOFF,
     DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF,
     DEFAULT_MINUTES_BEFORE_HOME_PICKUP,
@@ -50,6 +52,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Coordinator interval outside of any tracking window
 _IDLE_INTERVAL = timedelta(hours=1)
+
+# How long past the nominal window close to keep tracking when zones are configured
+# but the expected arrival hasn't been detected yet (handles late buses).
+_EXTEND_HOURS = 2
 
 
 @dataclass
@@ -155,7 +161,10 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         session = async_get_clientsession(self.hass)
         url = f"{API_BASE}/{path}"
         async with session.get(url, headers=self._auth_headers) as resp:
-            if resp.status == 401:
+            # The Stopfinder API returns 203 with a non-JSON body when the token
+            # has expired rather than a standard 401, so treat any non-JSON 2xx
+            # response as a stale-token signal and re-authenticate.
+            if resp.status == 401 or "json" not in (resp.content_type or ""):
                 await self.async_authenticate()
                 async with session.get(url, headers=self._auth_headers) as r2:
                     r2.raise_for_status()
@@ -250,22 +259,56 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
     # Tracking window — per bus
     # ------------------------------------------------------------------
 
-    def _tracking_window(self, bd: BusData) -> tuple[bool, str | None]:
-        """Return (in_window, trip_type) for the current time and this bus."""
+    def _arrival_recorded(self, bus_key: str, trip_point: str) -> bool:
+        """True if the actual sensor for this trip point was stamped today."""
+        sensor = (
+            self.hass.data.get(DOMAIN, {})
+            .get(self._config_entry.entry_id, {})
+            .get("actual_sensors", {})
+            .get(bus_key, {})
+            .get(trip_point)
+        )
+        if sensor is None:
+            return False
+        val = sensor.native_value
+        return val is not None and val.date() == dt_util.now().date()
+
+    def _tracking_window(self, bd: BusData, bus_key: str) -> tuple[bool, str | None]:
+        """Return (in_window, trip_type) for the current time and this bus.
+
+        If zones are configured and the bus hasn't been detected in the expected
+        zone yet, the window is extended up to _EXTEND_HOURS past the nominal
+        close so that late buses remain visible.
+        """
         now  = dt_util.now()
         e1   = self._edge(CONF_MINUTES_BEFORE_HOME_PICKUP,   _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_HOME_PICKUP)
         e2   = self._edge(CONF_MINUTES_AFTER_SCHOOL_DROPOFF, _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_SCHOOL_DROPOFF)
         e3   = self._edge(CONF_MINUTES_BEFORE_SCHOOL_PICKUP, _CONF_MINUTES_BEFORE_LEGACY, DEFAULT_MINUTES_BEFORE_SCHOOL_PICKUP)
         e4   = self._edge(CONF_MINUTES_AFTER_HOME_DROPOFF,   _CONF_MINUTES_AFTER_LEGACY,  DEFAULT_MINUTES_AFTER_HOME_DROPOFF)
 
+        opts = self._config_entry.options
+        zones_active = bool(opts.get(CONF_ZONE_NEIGHBORHOOD) or opts.get(CONF_ZONE_SCHOOL))
+
         # Morning : home_pickup − e1  →  school_dropoff + e2
         if bd.home_pickup and bd.school_dropoff:
             if bd.home_pickup - timedelta(minutes=e1) <= now <= bd.school_dropoff + timedelta(minutes=e2):
+                return True, "morning"
+            # Extend: zones configured, past nominal close, arrival not yet detected
+            if (zones_active
+                    and now > bd.school_dropoff + timedelta(minutes=e2)
+                    and now <= bd.school_dropoff + timedelta(hours=_EXTEND_HOURS)
+                    and not self._arrival_recorded(bus_key, "school_dropoff")):
                 return True, "morning"
 
         # Afternoon : school_pickup − e3  →  home_dropoff + e4
         if bd.school_pickup and bd.home_dropoff:
             if bd.school_pickup - timedelta(minutes=e3) <= now <= bd.home_dropoff + timedelta(minutes=e4):
+                return True, "afternoon"
+            # Extend: zones configured, past nominal close, arrival not yet detected
+            if (zones_active
+                    and now > bd.home_dropoff + timedelta(minutes=e4)
+                    and now <= bd.home_dropoff + timedelta(hours=_EXTEND_HOURS)
+                    and not self._arrival_recorded(bus_key, "home_dropoff")):
                 return True, "afternoon"
 
         return False, None
@@ -277,46 +320,57 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
     async def _async_update_data(self) -> StopfinderCoordinatorData:
         today = dt_util.now().date().isoformat()
 
+        # Schedule fetch is fatal — no schedule means no data.
         try:
             if self._cached_buses is None or self._cached_date != today:
                 raw = await self._api_get(f"students?dateStart={today}&dateEnd={today}")
                 self._cached_buses = self._parse_all_buses(raw)
                 self._cached_date  = today
-
-            buses = self._cached_buses
-            if not buses:
-                # Weekend / holiday — no schedule
-                self.update_interval = _IDLE_INTERVAL
-                return {}
-
-            poll_s = int(self._opt(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
-            any_active = False
-
-            for bd in buses.values():
-                in_window, trip = self._tracking_window(bd)
-                bd.tracking_active = in_window
-                bd.active_trip     = trip
-                bd.latitude        = None
-                bd.longitude       = None
-
-                if in_window:
-                    any_active = True
-                    group = f"{bd.client_id}_{bd.data_source_id}_{bd.bus_number}"
-                    gps_raw = await self._api_get(f"gps?groupName={group}")
-                    gps = (gps_raw[0] if isinstance(gps_raw, list) else gps_raw) or {}
-                    lat = gps.get("latitude")
-                    lon = gps.get("longitude")
-                    if lat is not None and lon is not None:
-                        bd.latitude  = float(lat)
-                        bd.longitude = float(lon)
-
-            self.update_interval = (
-                timedelta(seconds=poll_s) if any_active else _IDLE_INTERVAL
-            )
-            return buses
-
         except Exception as err:
-            raise UpdateFailed(f"Stopfinder API error: {err}") from err
+            raise UpdateFailed(f"Stopfinder schedule fetch error: {err}") from err
+
+        buses = self._cached_buses
+        if not buses:
+            # Weekend / holiday — no schedule
+            self.update_interval = _IDLE_INTERVAL
+            return {}
+
+        poll_s = int(self._opt(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
+        any_active = False
+
+        for bus_key, bd in buses.items():
+            in_window, trip = self._tracking_window(bd, bus_key)
+            bd.tracking_active = in_window
+            bd.active_trip     = trip
+
+            if not in_window:
+                # Only clear coordinates when outside the window so a transient
+                # GPS fetch error mid-ride doesn't blank the last known position.
+                bd.latitude  = None
+                bd.longitude = None
+                continue
+
+            any_active = True
+            group = f"{bd.client_id}_{bd.data_source_id}_{bd.bus_number}"
+            try:
+                gps_raw = await self._api_get(f"gps?groupName={group}")
+                gps = (gps_raw[0] if isinstance(gps_raw, list) else gps_raw) or {}
+                lat = gps.get("latitude")
+                lon = gps.get("longitude")
+                if lat is not None and lon is not None:
+                    bd.latitude  = float(lat)
+                    bd.longitude = float(lon)
+                else:
+                    bd.latitude  = None
+                    bd.longitude = None
+            except Exception as err:
+                # GPS errors are non-fatal: log and keep the last known position.
+                _LOGGER.warning("GPS fetch failed for bus %s, keeping last position: %s", bus_key, err)
+
+        self.update_interval = (
+            timedelta(seconds=poll_s) if any_active else _IDLE_INTERVAL
+        )
+        return buses
 
     def invalidate_schedule_cache(self) -> None:
         self._cached_buses = None

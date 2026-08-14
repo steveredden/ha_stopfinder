@@ -53,7 +53,7 @@ def _window_selector() -> selector.NumberSelector:
 def _poll_selector() -> selector.NumberSelector:
     return selector.NumberSelector(
         selector.NumberSelectorConfig(
-            min=5, max=300, step=5,
+            min=1, max=300, step=1,
             unit_of_measurement="seconds",
             mode=selector.NumberSelectorMode.SLIDER,
         )

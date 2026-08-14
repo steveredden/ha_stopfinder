@@ -11,7 +11,7 @@ HACS integration that tracks school buses via the Transfinder Stopfinder mobile 
 - **Scheduled time sensors** — four per bus (`home_pickup`, `school_dropoff`, `school_pickup`, `home_dropoff`), adjusted by the API's `adjustMinutes` offset. Always visible; uses cached data so they never go unavailable due to a transient poll failure.
 - **Actual arrival sensors** — four matching `*_actual` sensors, stamped automatically when the bus GPS enters a configured zone. Persisted across restarts (restored if date matches today); reset at 00:05 each morning.
 - **Schedule type** — `normal` / `early` / `halfday`, derived automatically from the afternoon school-pickup time vs. configurable hour thresholds (defaults: half day < 1 PM, early release < 2 PM).
-- **Smart polling** — GPS is fetched only within four independently configurable tracking windows (before/after each pickup and dropoff event). Outside windows the coordinator polls hourly to keep schedules current.
+- **Smart polling** — GPS is fetched only within four independently configurable tracking windows (before/after each pickup and dropoff event). Outside windows the coordinator polls hourly to keep schedules current. If zones are configured and the bus hasn't been detected yet, the window automatically extends up to 2 hours past the nominal close — late buses remain visible without manual intervention.
 - **GPS zone proximity detection** — zone entry is detected by Haversine distance against the zone's center + radius, avoiding the HA entity-registry timing race that afflicts state-listener approaches.
 - **No personal data stored** — devices and entities are named by bus number only.
 
@@ -29,11 +29,11 @@ HACS integration that tracks school buses via the Transfinder Stopfinder mobile 
 
 | Setting | Default | Description |
 |---|---|---|
-| Poll Interval | 5 s | GPS fetch rate inside a tracking window |
-| Before Home Pickup | 15 min | Morning window open |
-| After School Dropoff | 15 min | Morning window close |
-| Before School Pickup | 15 min | Afternoon window open |
-| After Home Dropoff | 15 min | Afternoon window close |
+| Poll Interval | 5 s (1–300 s) | GPS fetch rate inside a tracking window |
+| Before Home Pickup | 25 min | Morning window opens this many minutes before scheduled pickup |
+| After School Dropoff | 5 min | Morning window closes this many minutes after scheduled dropoff |
+| Before School Pickup | 25 min | Afternoon window opens this many minutes before scheduled pickup |
+| After Home Dropoff | 5 min | Afternoon window closes this many minutes after scheduled dropoff |
 | Half-Day Threshold | 13 (1 PM) | School pickup before this hour → half day |
 | Early Release Threshold | 14 (2 PM) | School pickup before this hour → early release |
 
