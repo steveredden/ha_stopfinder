@@ -64,8 +64,16 @@ class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
         bd = self._bus_data
         if not bd:
             return {"bus_number": self._bus_key}
+
+        def _iso(dt):
+            return dt.isoformat() if dt else None
+
         return {
-            "bus_number":      bd.bus_number,
-            "tracking_active": bd.tracking_active,
-            "active_trip":     bd.active_trip,
+            "bus_number":              bd.bus_number,
+            "tracking_active":         bd.tracking_active,
+            "active_trip":             bd.active_trip,
+            "morning_window_start":    _iso(bd.morning_window_start),
+            "morning_window_end":      _iso(bd.morning_window_end),
+            "afternoon_window_start":  _iso(bd.afternoon_window_start),
+            "afternoon_window_end":    _iso(bd.afternoon_window_end),
         }

@@ -47,8 +47,10 @@ views:
 
           - type: markdown
             content: |
+              {%- set time_fmt = '%H:%M' -%}
+              {#- Change to '%I:%M %p' for 12-hour format (e.g. 08:20 → 08:20 AM) -#}
               {%- macro fmt(s) -%}
-                {%- if s in ['unknown','unavailable'] -%}—{%- else -%}{{ as_timestamp(s) | timestamp_custom('%H:%M') }}{%- endif -%}
+                {%- if s in ['unknown','unavailable'] -%}—{%- else -%}{{ as_timestamp(s) | timestamp_custom(time_fmt) }}{%- endif -%}
               {%- endmacro -%}
               {%- macro delta(sc, ac) -%}
                 {%- if ac not in ['unknown','unavailable'] and sc not in ['unknown','unavailable'] -%}
@@ -64,52 +66,54 @@ views:
               {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
               {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
               {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
+              {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
+              {%- set mws = state_attr(dt, 'morning_window_start') -%}
+              {%- set mwe = state_attr(dt, 'morning_window_end') -%}
+              {%- set aws = state_attr(dt, 'afternoon_window_start') -%}
+              {%- set awe = state_attr(dt, 'afternoon_window_end') -%}
+              {%- macro win(s, e) -%}
+                {%- if s and e -%}GPS {{ fmt(s) }}–{{ fmt(e) }}{%- else -%}GPS window unknown{%- endif -%}
+              {%- endmacro -%}
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
                 <th align="center" width="33%">Scheduled</th>
                 <th align="center" width="33%">Actual</th>
               </tr>
-              <tr>
+              <tr title="{{ win(mws, mwe) }}">
                 <td><ha-icon icon="mdi:home"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_hp) }}</td>
                 <td align="center">{{ fmt(a_hp) }}{{ delta(s_hp, a_hp) }}</td>
               </tr>
-              <tr>
+              <tr title="{{ win(mws, mwe) }}">
                 <td><ha-icon icon="mdi:school"></ha-icon> Dropoff</td>
                 <td align="center">{{ fmt(s_sd) }}</td>
                 <td align="center">{{ fmt(a_sd) }}{{ delta(s_sd, a_sd) }}</td>
               </tr>
-              <tr>
+              <tr title="{{ win(aws, awe) }}">
                 <td><ha-icon icon="mdi:school"></ha-icon> Pickup</td>
                 <td align="center">{{ fmt(s_sp) }}</td>
                 <td align="center">{{ fmt(a_sp) }}{{ delta(s_sp, a_sp) }}</td>
               </tr>
-              <tr>
+              <tr title="{{ win(aws, awe) }}">
                 <td><ha-icon icon="mdi:home"></ha-icon> Dropoff</td>
                 <td align="center">{{ fmt(s_hd) }}</td>
                 <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
             # ── card_mod users ──────────────────────────────────────────────
-            # Adds borders + padding to the 12 data cells only.
+            # Adds borders + padding to the 12 data cells only, and fixes
+            # th alignment (HA markdown CSS overrides align= on th to left).
             # Requires the card_mod HACS frontend resource.
             #
             # ha-markdown$ pierces ha-markdown's shadow DOM.
             #
-            # Three-step approach:
-            #   1. Zero out HA's --markdown-table-border-* custom properties
-            #      on ha-markdown-element. These drive the constructed
-            #      stylesheet (constructed:1 in DevTools) that adds the
-            #      default row lines — setting them to 0/none removes all
-            #      default table borders cleanly.
-            #   2. Re-add a full border only on td:not([colspan]).
-            #      Section title rows use colspan="3", so this selector
-            #      targets exactly the 12 data cells.
-            #   3. Use a concrete fallback color alongside var(--divider-color)
-            #      because the variable may not resolve inside the shadow
-            #      scope (shown as ?= in DevTools), causing the entire
-            #      border shorthand to silently become invalid.
+            # --markdown-table-border-* are zeroed on ha-markdown-element to
+            # suppress the constructed stylesheet's default row lines at
+            # source, avoiding an !important fight. Borders are then
+            # selectively re-added only to td:not([colspan]) — the 4 data
+            # rows, 3 cells each. The rgba fallback ensures the border is
+            # always visible if --divider-color doesn't resolve in scope.
             #card_mod:
             #  style:
             #    ha-markdown$: |
@@ -119,6 +123,12 @@ views:
             #      }
             #      table {
             #        border-collapse: collapse;
+            #      }
+            #      table th {
+            #        text-align: center;
+            #      }
+            #      table th:first-child {
+            #        text-align: left;
             #      }
             #      table td:not([colspan]) {
             #        border: 1px solid var(--divider-color, rgba(255,255,255,0.15)) !important;
