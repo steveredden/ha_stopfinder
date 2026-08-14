@@ -103,18 +103,30 @@ views:
               </tr>
               </table>
             # ── card_mod users ──────────────────────────────────────────────
-            # Adds borders + padding to the 12 data cells and collapses
-            # double-borders between adjacent cells. Requires the card_mod
-            # HACS frontend resource.
+            # Adds borders + padding to the 12 data cells only.
+            # Requires the card_mod HACS frontend resource.
+            #
+            # ha-markdown$ pierces ha-markdown's shadow DOM where the
+            # rendered HTML lives.
+            #
+            # Two-step approach:
+            #   1. Reset HA's default td border-bottom on all cells.
+            #   2. Re-add a full border only on td:not([colspan]) —
+            #      the section title rows use colspan="3", so this
+            #      selector hits exactly the 12 data cells.
+            # !important overrides HA's base table styles.
             #card_mod:
             #  style:
             #    ha-markdown$: |
             #      table {
             #        border-collapse: collapse;
             #      }
-            #      table td {
-            #        border: 1px solid var(--divider-color);
-            #        padding: 4px 8px;
+            #      table td, table th {
+            #        border-bottom: none !important;
+            #      }
+            #      table td:not([colspan]) {
+            #        border: 1px solid var(--divider-color) !important;
+            #        padding: 4px 8px !important;
             #      }
 
       # ── Add additional buses below ─────────────────────────────────────────
