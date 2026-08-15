@@ -33,8 +33,9 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Coordinator interval outside of any tracking window
-_IDLE_INTERVAL = timedelta(hours=1)
+# Coordinator heartbeat interval — used outside any active tracking window.
+# 10 minutes ensures we enter the GPS-polling mode before the window opens.
+_HEARTBEAT_INTERVAL = timedelta(minutes=10)
 
 # How long past the nominal window close to keep tracking when zones are configured
 # but the expected arrival hasn't been detected yet (handles late buses).
@@ -112,7 +113,7 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=_IDLE_INTERVAL,
+            update_interval=_HEARTBEAT_INTERVAL,
         )
 
     # ------------------------------------------------------------------
@@ -350,7 +351,7 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         buses = self._cached_buses
         if not buses:
             # Weekend / holiday — no schedule
-            self.update_interval = _IDLE_INTERVAL
+            self.update_interval = _HEARTBEAT_INTERVAL
             return {}
 
         poll_s = int(self._opt(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL))
@@ -386,7 +387,7 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                 _LOGGER.warning("GPS fetch failed for bus %s, keeping last position: %s", bus_key, err)
 
         self.update_interval = (
-            timedelta(seconds=poll_s) if any_active else _IDLE_INTERVAL
+            timedelta(seconds=poll_s) if any_active else _HEARTBEAT_INTERVAL
         )
         return buses
 
