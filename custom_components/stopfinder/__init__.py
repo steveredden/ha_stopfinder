@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = {
         "coordinator": coordinator,
-        "actual_sensors": {},  # bus_key → {trip_point → ActualTimeSensor}
+        "actual_sensors": {},  # student_key → {trip_point → ActualTimeSensor}
     }
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
@@ -78,7 +78,7 @@ def _setup_stop_detection(
     rather than HA zone state changes to avoid the entity-registry timing race.
     """
     entry_id   = config_entry.entry_id
-    prev_stop: dict[str, str | None] = {}   # bus_key → stop_key or None
+    prev_stop: dict[str, str | None] = {}   # student_key → stop_key or None
 
     @callback
     def _on_coordinator_update() -> None:
@@ -90,23 +90,23 @@ def _setup_stop_detection(
             hass.data.get(DOMAIN, {}).get(entry_id, {}).get("actual_sensors", {})
         )
 
-        for bus_key, bd in data.items():
-            if not bd.tracking_active or bd.latitude is None or bd.longitude is None:
-                prev_stop[bus_key] = None
+        for student_key, sd in data.items():
+            if not sd.tracking_active or sd.latitude is None or sd.longitude is None:
+                prev_stop[student_key] = None
                 continue
 
-            if bd.active_trip == "morning":
+            if sd.active_trip == "morning":
                 candidates = [
-                    ("home_pickup",    bd.home_pickup_stop,    bd.home_pickup),
-                    ("school_dropoff", bd.school_dropoff_stop, bd.school_dropoff),
+                    ("home_pickup",    sd.home_pickup_stop,    sd.home_pickup),
+                    ("school_dropoff", sd.school_dropoff_stop, sd.school_dropoff),
                 ]
-            elif bd.active_trip == "afternoon":
+            elif sd.active_trip == "afternoon":
                 candidates = [
-                    ("school_pickup", bd.school_pickup_stop, bd.school_pickup),
-                    ("home_dropoff",  bd.home_dropoff_stop,  bd.home_dropoff),
+                    ("school_pickup", sd.school_pickup_stop, sd.school_pickup),
+                    ("home_dropoff",  sd.home_dropoff_stop,  sd.home_dropoff),
                 ]
             else:
-                prev_stop[bus_key] = None
+                prev_stop[student_key] = None
                 continue
 
             now = dt_util.now()
@@ -116,23 +116,21 @@ def _setup_stop_detection(
             for stop_key, coords, scheduled_time in candidates:
                 if coords is None:
                     continue
-                # Skip if we're more than STOP_TIME_GUARD_MIN before the
-                # scheduled time — the bus is likely on a different run.
                 if scheduled_time and now < scheduled_time - guard:
                     continue
                 slat, slon = coords
-                if haversine_m(bd.latitude, bd.longitude, slat, slon) <= STOP_RADIUS_M:
+                if haversine_m(sd.latitude, sd.longitude, slat, slon) <= STOP_RADIUS_M:
                     current_stop = stop_key
                     break
 
-            last_stop = prev_stop.get(bus_key)
-            prev_stop[bus_key] = current_stop
+            last_stop = prev_stop.get(student_key)
+            prev_stop[student_key] = current_stop
 
             if current_stop and current_stop != last_stop:
-                actual_sensors = actual_sensors_all.get(bus_key, {})
+                actual_sensors = actual_sensors_all.get(student_key, {})
                 _LOGGER.debug(
-                    "Bus %s arrived at stop %s (trip=%s)",
-                    bus_key, current_stop, bd.active_trip,
+                    "Student %s arrived at stop %s (trip=%s)",
+                    student_key, current_stop, sd.active_trip,
                 )
                 _stamp(actual_sensors, current_stop, dt_util.now())
 

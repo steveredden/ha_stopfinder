@@ -1,4 +1,4 @@
-"""Stopfinder device_tracker platform – one entity per unique school bus."""
+"""Stopfinder device_tracker platform – one entity per student."""
 from __future__ import annotations
 
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
@@ -8,7 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
 from .coordinator import StopfinderCoordinator
-from .entity import StopfinderBusEntity, async_setup_bus_entities
+from .entity import StopfinderStudentEntity, async_setup_student_entities
 
 
 async def async_setup_entry(
@@ -18,28 +18,28 @@ async def async_setup_entry(
 ) -> None:
     coordinator: StopfinderCoordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
 
-    async_setup_bus_entities(
+    async_setup_student_entities(
         coordinator,
         config_entry,
         async_add_entities,
-        lambda bus_key: [StopfinderBusTracker(coordinator, config_entry, bus_key)],
+        lambda student_key: [StopfinderStudentTracker(coordinator, config_entry, student_key)],
     )
 
 
-class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
-    """GPS tracker for one school bus."""
+class StopfinderStudentTracker(StopfinderStudentEntity, TrackerEntity):
+    """GPS tracker for one student's school bus."""
 
     _attr_icon = "mdi:bus-school"
-    _attr_name = None  # entity name = device name
+    _attr_name = None  # entity name = device name ("John Stopfinder")
 
     def __init__(
         self,
         coordinator: StopfinderCoordinator,
         config_entry: ConfigEntry,
-        bus_key: str,
+        student_key: str,
     ) -> None:
-        super().__init__(coordinator, config_entry, bus_key)
-        self._attr_unique_id = f"{config_entry.entry_id}_tracker_{bus_key}"
+        super().__init__(coordinator, config_entry, student_key)
+        self._attr_unique_id = f"{config_entry.entry_id}_tracker_{student_key}"
 
     @property
     def available(self) -> bool:
@@ -47,13 +47,13 @@ class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
 
     @property
     def latitude(self) -> float | None:
-        bd = self._bus_data
-        return bd.latitude if bd else None
+        sd = self._student_data
+        return sd.latitude if sd else None
 
     @property
     def longitude(self) -> float | None:
-        bd = self._bus_data
-        return bd.longitude if bd else None
+        sd = self._student_data
+        return sd.longitude if sd else None
 
     @property
     def source_type(self) -> SourceType:
@@ -61,23 +61,35 @@ class StopfinderBusTracker(StopfinderBusEntity, TrackerEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        bd = self._bus_data
-        if not bd:
-            return {"bus_number": self._bus_key}
+        sd = self._student_data
+        if not sd:
+            return {"rider_id": self._student_key}
 
         def _iso(dt):
             return dt.isoformat() if dt else None
 
+        bus_number = (
+            sd.morning_bus_number if sd.active_trip == "morning"
+            else sd.afternoon_bus_number if sd.active_trip == "afternoon"
+            else sd.morning_bus_number or sd.afternoon_bus_number
+        )
+
         return {
-            "bus_number":              bd.bus_number,
-            "tracking_active":         bd.tracking_active,
-            "active_trip":             bd.active_trip,
-            "morning_window_start":    _iso(bd.morning_window_start),
-            "morning_window_end":      _iso(bd.morning_window_end),
-            "afternoon_window_start":  _iso(bd.afternoon_window_start),
-            "afternoon_window_end":    _iso(bd.afternoon_window_end),
-            "home_pickup_stop_name":    bd.home_pickup_stop_name,
-            "school_dropoff_stop_name": bd.school_dropoff_stop_name,
-            "school_pickup_stop_name":  bd.school_pickup_stop_name,
-            "home_dropoff_stop_name":   bd.home_dropoff_stop_name,
+            "rider_id":                sd.rider_id,
+            "student_name":            f"{sd.first_name} {sd.last_name}",
+            "grade":                   sd.grade,
+            "school":                  sd.school,
+            "bus_number":              bus_number,
+            "morning_bus_number":      sd.morning_bus_number,
+            "afternoon_bus_number":    sd.afternoon_bus_number,
+            "tracking_active":         sd.tracking_active,
+            "active_trip":             sd.active_trip,
+            "morning_window_start":    _iso(sd.morning_window_start),
+            "morning_window_end":      _iso(sd.morning_window_end),
+            "afternoon_window_start":  _iso(sd.afternoon_window_start),
+            "afternoon_window_end":    _iso(sd.afternoon_window_end),
+            "home_pickup_stop_name":    sd.home_pickup_stop_name,
+            "school_dropoff_stop_name": sd.school_dropoff_stop_name,
+            "school_pickup_stop_name":  sd.school_pickup_stop_name,
+            "home_dropoff_stop_name":   sd.home_dropoff_stop_name,
         }

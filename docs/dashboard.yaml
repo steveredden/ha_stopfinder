@@ -1,10 +1,11 @@
 # Stopfinder Bus Tracker Dashboard
 #
 # SETUP:
-#   1. Find your bus number: Developer Tools → States → search "device_tracker.bus_"
-#      Example: device_tracker.bus_201abc → BUS_NUMBER = 201abc
-#   2. Search-and-replace BUS_NUMBER with your actual bus number.
-#   3. For multiple buses, duplicate the vertical-stack block.
+#   1. Find your student's device_tracker entity:
+#      Developer Tools → States → search "device_tracker." and look for "_stopfinder"
+#      Example: device_tracker.john_stopfinder → STUDENT_NAME = john
+#   2. Search-and-replace STUDENT_NAME with your student's first name (lowercase).
+#   3. For multiple students, duplicate the vertical-stack block.
 #   4. Import: Dashboard → Edit → Raw Configuration Editor → paste.
 
 title: Stopfinder
@@ -15,25 +16,21 @@ views:
     icon: mdi:bus-school
     cards:
 
-      # ── Bus BUS_NUMBER ────────────────────────────────────────────────────
+      # ── Student STUDENT_NAME ──────────────────────────────────────────────
       - type: vertical-stack
         cards:
 
           - type: map
-            title: Bus BUS_NUMBER
+            title: Bus Tracker
             hours_to_show: 0.5
             default_zoom: 16
             auto_fit: true
             fit_zones: true
             entities:
-              - entity: device_tracker.bus_BUS_NUMBER
+              - entity: device_tracker.STUDENT_NAME_stopfinder
               #- entity: zone.home
             # ── card_mod users ──────────────────────────────────────────────
             # Requires the card_mod HACS frontend resource.
-            # Each key pierces a shadow DOM boundary ($) to reach the target.
-            # --
-            #   Hides the "Leaflet | © OpenStreetMap" attribution bar
-            #   Removes the solid background circle from the bus pin
             #card_mod:
             #  style:
             #    ha-map$: |
@@ -50,11 +47,13 @@ views:
             content: |
               {%- set time_fmt = '%H:%M' -%}
               {#- Change to '%I:%M %p' for 12-hour format -#}
-              {%- set dt = 'device_tracker.bus_BUS_NUMBER' -%}
+              {%- set dt = 'device_tracker.STUDENT_NAME_stopfinder' -%}
               {%- set sn_hp = state_attr(dt, 'home_pickup_stop_name') -%}
               {%- set sn_sd = state_attr(dt, 'school_dropoff_stop_name') -%}
               {%- set sn_sp = state_attr(dt, 'school_pickup_stop_name') -%}
               {%- set sn_hd = state_attr(dt, 'home_dropoff_stop_name') -%}
+              {%- set am_bus = state_attr(dt, 'morning_bus_number') -%}
+              {%- set pm_bus = state_attr(dt, 'afternoon_bus_number') -%}
               {%- set ns = namespace(chip='No active trip') -%}
               {%- if state_attr(dt, 'tracking_active') -%}
                 {%- set trip = state_attr(dt, 'active_trip') -%}
@@ -63,16 +62,12 @@ views:
               {%- set last_gps = (states[dt].last_updated | as_timestamp | timestamp_custom(time_fmt)) if states[dt] else '—' -%}
               <table width="100%"><tr><td>{{ ns.chip }}</td><td align="right"><small>Last GPS Update: {{ last_gps }}</small></td></tr></table>
 
-              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning**
+              <ha-icon icon="mdi:home-clock-outline"></ha-icon> **Morning** {% if am_bus %}<small>(Bus {{ am_bus }})</small>{% endif %}
               {% if sn_hp or sn_sd %}<small><ha-icon icon="mdi:home"></ha-icon> {{ sn_hp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:school"></ha-icon> {{ sn_sd or '—' }}</small>{% endif %}
 
-              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon**
+              <ha-icon icon="mdi:school-outline"></ha-icon> **Afternoon** {% if pm_bus %}<small>(Bus {{ pm_bus }})</small>{% endif %}
               {% if sn_sp or sn_hd %}<small><ha-icon icon="mdi:school"></ha-icon> {{ sn_sp or '—' }} &nbsp;→&nbsp; <ha-icon icon="mdi:home"></ha-icon> {{ sn_hd or '—' }}</small>{% endif %}
 
-            # ── card_mod users ──────────────────────────────────────────────
-            # Removes the border-bottom that HA's constructed stylesheet adds
-            # to all td elements by default. The status row is a layout table,
-            # not a data table — it should have no visible borders.
             #card_mod:
             #  style:
             #    ha-markdown$: |
@@ -95,14 +90,14 @@ views:
                   {%- if d == 0 %} <em>(on time)</em>{%- elif d > 0 %} <em>(+{{ d }}m)</em>{%- else %} <em>({{ d }}m)</em>{%- endif -%}
                 {%- endif -%}
               {%- endmacro -%}
-              {%- set s_hp = states('sensor.bus_BUS_NUMBER_home_pickup') -%}
-              {%- set s_sd = states('sensor.bus_BUS_NUMBER_school_dropoff') -%}
-              {%- set s_sp = states('sensor.bus_BUS_NUMBER_school_pickup') -%}
-              {%- set s_hd = states('sensor.bus_BUS_NUMBER_home_dropoff') -%}
-              {%- set a_hp = states('sensor.bus_BUS_NUMBER_home_pickup_actual') -%}
-              {%- set a_sd = states('sensor.bus_BUS_NUMBER_school_dropoff_actual') -%}
-              {%- set a_sp = states('sensor.bus_BUS_NUMBER_school_pickup_actual') -%}
-              {%- set a_hd = states('sensor.bus_BUS_NUMBER_home_dropoff_actual') -%}
+              {%- set s_hp = states('sensor.STUDENT_NAME_stopfinder_home_pickup') -%}
+              {%- set s_sd = states('sensor.STUDENT_NAME_stopfinder_school_dropoff') -%}
+              {%- set s_sp = states('sensor.STUDENT_NAME_stopfinder_school_pickup') -%}
+              {%- set s_hd = states('sensor.STUDENT_NAME_stopfinder_home_dropoff') -%}
+              {%- set a_hp = states('sensor.STUDENT_NAME_stopfinder_home_pickup_actual') -%}
+              {%- set a_sd = states('sensor.STUDENT_NAME_stopfinder_school_dropoff_actual') -%}
+              {%- set a_sp = states('sensor.STUDENT_NAME_stopfinder_school_pickup_actual') -%}
+              {%- set a_hd = states('sensor.STUDENT_NAME_stopfinder_home_dropoff_actual') -%}
               <table width="100%">
               <tr>
                 <th align="left" width="34%">&nbsp;</th>
@@ -130,19 +125,6 @@ views:
                 <td align="center">{{ fmt(a_hd) }}{{ delta(s_hd, a_hd) }}</td>
               </tr>
               </table>
-            # ── card_mod users ──────────────────────────────────────────────
-            # Adds borders + padding to the 12 data cells only, and fixes
-            # th alignment (HA markdown CSS overrides align= on th to left).
-            # Requires the card_mod HACS frontend resource.
-            #
-            # ha-markdown$ pierces ha-markdown's shadow DOM.
-            #
-            # --markdown-table-border-* are zeroed on ha-markdown-element to
-            # suppress the constructed stylesheet's default row lines at
-            # source, avoiding an !important fight. Borders are then
-            # selectively re-added only to td:not([colspan]) — the 4 data
-            # rows, 3 cells each. The rgba fallback ensures the border is
-            # always visible if --divider-color doesn't resolve in scope.
             #card_mod:
             #  style:
             #    ha-markdown$: |
@@ -164,7 +146,7 @@ views:
             #        padding: 4px 8px !important;
             #      }
 
-      # ── Add additional buses below ─────────────────────────────────────────
+      # ── Add additional students below ──────────────────────────────────────
       # - type: vertical-stack
       #   cards:
       #     - type: map

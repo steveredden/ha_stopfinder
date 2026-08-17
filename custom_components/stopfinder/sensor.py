@@ -1,4 +1,4 @@
-"""Stopfinder sensor platform – scheduled/actual times, one set per bus."""
+"""Stopfinder sensor platform – scheduled/actual times, one set per student."""
 from __future__ import annotations
 
 import logging
@@ -18,7 +18,7 @@ from .const import (
     TRIP_ICONS,
 )
 from .coordinator import StopfinderCoordinator
-from .entity import StopfinderBusEntity, async_setup_bus_entities
+from .entity import StopfinderStudentEntity, async_setup_student_entities
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,30 +36,30 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: StopfinderCoordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    actual_sensors_by_bus: dict[str, dict[str, ActualTimeSensor]] = (
+    actual_sensors_by_student: dict[str, dict[str, ActualTimeSensor]] = (
         hass.data[DOMAIN][config_entry.entry_id].setdefault("actual_sensors", {})
     )
 
-    def _make(bus_key: str) -> list[Entity]:
+    def _make(student_key: str) -> list[Entity]:
         entities: list[Entity] = []
         actuals: dict[str, ActualTimeSensor] = {}
         for trip_point, label in TRIP_POINTS:
-            entities.append(ScheduledTimeSensor(coordinator, config_entry, bus_key, trip_point, label))
-            actual = ActualTimeSensor(coordinator, config_entry, bus_key, trip_point, label)
+            entities.append(ScheduledTimeSensor(coordinator, config_entry, student_key, trip_point, label))
+            actual = ActualTimeSensor(coordinator, config_entry, student_key, trip_point, label)
             actuals[trip_point] = actual
             entities.append(actual)
 
-        actual_sensors_by_bus[bus_key] = actuals
+        actual_sensors_by_student[student_key] = actuals
         return entities
 
-    async_setup_bus_entities(coordinator, config_entry, async_add_entities, _make)
+    async_setup_student_entities(coordinator, config_entry, async_add_entities, _make)
 
 
 # ---------------------------------------------------------------------------
 # Scheduled-time sensor
 # ---------------------------------------------------------------------------
 
-class ScheduledTimeSensor(StopfinderBusEntity, SensorEntity):
+class ScheduledTimeSensor(StopfinderStudentEntity, SensorEntity):
     """Shows the API-scheduled time for one trip event."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -68,27 +68,27 @@ class ScheduledTimeSensor(StopfinderBusEntity, SensorEntity):
         self,
         coordinator: StopfinderCoordinator,
         config_entry: ConfigEntry,
-        bus_key: str,
+        student_key: str,
         trip_point: str,
         label: str,
     ) -> None:
-        super().__init__(coordinator, config_entry, bus_key)
-        self._trip_point   = trip_point
+        super().__init__(coordinator, config_entry, student_key)
+        self._trip_point     = trip_point
         self._attr_name      = label
-        self._attr_unique_id = f"{config_entry.entry_id}_scheduled_{trip_point}_{bus_key}"
+        self._attr_unique_id = f"{config_entry.entry_id}_scheduled_{trip_point}_{student_key}"
         self._attr_icon      = TRIP_ICONS.get(trip_point, "mdi:clock")
 
     @property
     def native_value(self) -> datetime | None:
-        bd = self._bus_data
-        return getattr(bd, self._trip_point, None) if bd else None
+        sd = self._student_data
+        return getattr(sd, self._trip_point, None) if sd else None
 
 
 # ---------------------------------------------------------------------------
 # Actual-time sensor
 # ---------------------------------------------------------------------------
 
-class ActualTimeSensor(StopfinderBusEntity, SensorEntity, RestoreEntity):
+class ActualTimeSensor(StopfinderStudentEntity, SensorEntity, RestoreEntity):
     """Records actual bus arrival times. Always available; persists across restarts."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
@@ -97,14 +97,14 @@ class ActualTimeSensor(StopfinderBusEntity, SensorEntity, RestoreEntity):
         self,
         coordinator: StopfinderCoordinator,
         config_entry: ConfigEntry,
-        bus_key: str,
+        student_key: str,
         trip_point: str,
         label: str,
     ) -> None:
-        super().__init__(coordinator, config_entry, bus_key)
-        self._trip_point   = trip_point
+        super().__init__(coordinator, config_entry, student_key)
+        self._trip_point     = trip_point
         self._attr_name      = f"{label} Actual"
-        self._attr_unique_id = f"{config_entry.entry_id}_actual_{trip_point}_{bus_key}"
+        self._attr_unique_id = f"{config_entry.entry_id}_actual_{trip_point}_{student_key}"
         self._attr_icon      = TRIP_ACTUAL_ICONS.get(trip_point, "mdi:clock-outline")
         self._actual_time: datetime | None = None
 
@@ -130,7 +130,9 @@ class ActualTimeSensor(StopfinderBusEntity, SensorEntity, RestoreEntity):
     def record_arrival(self, timestamp: datetime) -> None:
         self._actual_time = timestamp
         self.async_write_ha_state()
-        _LOGGER.info("Bus %s actual %s: %s", self._bus_key, self._trip_point, timestamp)
+        _LOGGER.info(
+            "Student %s actual %s: %s", self._student_key, self._trip_point, timestamp
+        )
 
     def reset(self) -> None:
         self._actual_time = None

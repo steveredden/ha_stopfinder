@@ -1,9 +1,8 @@
-"""Shared base entity for Stopfinder bus entities.
+"""Shared base entity for Stopfinder student entities.
 
-Every entity in this integration is bound to a single bus *key* (see
-``bus_display_name``) and shares the same device grouping, coordinator-data
-lookup, and availability rule.  Subclasses override ``available`` where their
-lifecycle differs (the GPS tracker and the restore-backed actual-time sensor).
+Every entity in this integration is bound to a single student key
+(str(rider_id)) and shares the same device grouping, coordinator-data
+lookup, and availability rule.
 """
 from __future__ import annotations
 
@@ -17,31 +16,31 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import BusData, StopfinderCoordinator, bus_display_name
+from .coordinator import StudentData, StopfinderCoordinator, student_display_name
 
 
-def async_setup_bus_entities(
+def async_setup_student_entities(
     coordinator: StopfinderCoordinator,
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
     factory: Callable[[str], Iterable[Entity]],
 ) -> None:
-    """Add entities for each bus key as it first appears in coordinator data.
+    """Add entities for each student key as it first appears in coordinator data.
 
-    Buses show up over the course of a day (morning vs. afternoon routes), so
-    both platforms register a listener and add entities lazily.  ``factory``
-    is called once per newly-seen bus key and returns its entities.
+    Students show up once the daily schedule is fetched; both platforms
+    register a listener and add entities lazily.  ``factory`` is called once
+    per newly-seen student key and returns its entities.
     """
     known: set[str] = set()
 
     @callback
-    def _add_new(data: dict[str, BusData]) -> None:
+    def _add_new(data: dict[str, StudentData]) -> None:
         new_entities: list[Entity] = []
-        for bus_key in data:
-            if bus_key in known:
+        for student_key in data:
+            if student_key in known:
                 continue
-            known.add(bus_key)
-            new_entities.extend(factory(bus_key))
+            known.add(student_key)
+            new_entities.extend(factory(student_key))
         if new_entities:
             async_add_entities(new_entities)
 
@@ -56,8 +55,8 @@ def async_setup_bus_entities(
     config_entry.async_on_unload(coordinator.async_add_listener(_on_update))
 
 
-class StopfinderBusEntity(CoordinatorEntity[StopfinderCoordinator]):
-    """Base for all entities that represent one bus key."""
+class StopfinderStudentEntity(CoordinatorEntity[StopfinderCoordinator]):
+    """Base for all entities that represent one student (keyed by rider_id)."""
 
     _attr_has_entity_name = True
 
@@ -65,31 +64,32 @@ class StopfinderBusEntity(CoordinatorEntity[StopfinderCoordinator]):
         self,
         coordinator: StopfinderCoordinator,
         config_entry: ConfigEntry,
-        bus_key: str,
+        student_key: str,
     ) -> None:
         super().__init__(coordinator)
-        self._config_entry = config_entry
-        self._bus_key = bus_key
+        self._config_entry  = config_entry
+        self._student_key   = student_key
 
     @property
-    def _bus_data(self) -> BusData | None:
+    def _student_data(self) -> StudentData | None:
         d = self.coordinator.data
-        return d.get(self._bus_key) if d else None
+        return d.get(self._student_key) if d else None
 
     @property
     def device_info(self) -> DeviceInfo:
+        sd = self._student_data
+        name = (
+            student_display_name(sd.first_name, sd.last_name)
+            if sd else f"Student {self._student_key}"
+        )
         return DeviceInfo(
-            identifiers={(DOMAIN, f"{self._config_entry.entry_id}_{self._bus_key}")},
-            name=bus_display_name(self._bus_key),
+            identifiers={(DOMAIN, f"{self._config_entry.entry_id}_{self._student_key}")},
+            name=name,
             manufacturer="Transfinder",
             model="Stopfinder",
         )
 
     @property
     def available(self) -> bool:
-        # Available whenever the coordinator has ever returned data for this bus.
-        # coordinator.data persists across failed polls, so we stay available
-        # during transient errors.  Unavailable only on no-school days (bus
-        # absent from data) or before the very first successful fetch.
         d = self.coordinator.data
-        return d is not None and self._bus_key in d
+        return d is not None and self._student_key in d
