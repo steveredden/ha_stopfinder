@@ -74,6 +74,11 @@ class StopfinderStudentTracker(StopfinderStudentEntity, TrackerEntity):
             else sd.morning_bus_number or sd.afternoon_bus_number
         )
 
+        group_name = (
+            f"{sd.client_id}_{sd.data_source_id}_{bus_number}"
+            if bus_number else None
+        )
+
         return {
             "rider_id":                sd.rider_id,
             "student_name":            f"{sd.first_name} {sd.last_name}",
@@ -82,6 +87,7 @@ class StopfinderStudentTracker(StopfinderStudentEntity, TrackerEntity):
             "bus_number":              bus_number,
             "morning_bus_number":      sd.morning_bus_number,
             "afternoon_bus_number":    sd.afternoon_bus_number,
+            "gps_group_name":          group_name,
             "tracking_active":         sd.tracking_active,
             "active_trip":             sd.active_trip,
             "morning_window_start":    _iso(sd.morning_window_start),

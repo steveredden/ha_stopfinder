@@ -217,8 +217,12 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                 after_min  = int(schedule.get("afterTrip",  0))
 
                 trips       = schedule.get("trips", [])
-                to_school   = [t for t in trips if t.get("toSchool")]
-                from_school = [t for t in trips if not t.get("toSchool")]
+                # Exclude exception/transfer legs; prefer regular scheduled service.
+                # Falls back gracefully when these fields are absent (None is falsy).
+                regular     = [t for t in trips if not t.get("isException") and not t.get("isTransfer")]
+                pool        = regular if regular else trips
+                to_school   = [t for t in pool if t.get("toSchool")]
+                from_school = [t for t in pool if not t.get("toSchool")]
 
                 if to_school:
                     t = to_school[0]
@@ -299,8 +303,18 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
     async def _async_update_data(self) -> StopfinderCoordinatorData:
         today = dt_util.now().date().isoformat()
 
+        # Determine whether any student is currently in a tracking window.
+        # The schedule cache is refreshed every heartbeat (when not actively
+        # tracking) so vehicle substitutions are picked up within ~10 minutes.
+        # During active GPS polling (5 s) we reuse the cached schedule to avoid
+        # hammering the endpoint on every poll.
+        in_window = any(
+            self._tracking_window(sd, key)[0]
+            for key, sd in (self._cached_students or {}).items()
+        )
+
         try:
-            if self._cached_students is None or self._cached_date != today:
+            if self._cached_students is None or self._cached_date != today or not in_window:
                 raw = await self._api_get(f"students?dateStart={today}&dateEnd={today}")
                 self._cached_students = self._parse_all_students(raw)
                 self._cached_date     = today
