@@ -1,0 +1,780 @@
+# Redacted Home Assistant Bus Tracker dashboard example
+# Replace the example entity IDs below with the entity IDs created by your Stopfinder integration.
+# Requires card-mod / custom:mod-card.
+# Layout: Middle School is left on desktop and top on mobile; Elementary School is right on desktop and bottom on mobile.
+#
+title: Bus Tracker
+path: bus-tracker
+icon: mdi:bus-school
+type: sections
+max_columns: 4
+dense_section_placement: false
+sections:
+  - type: grid
+    column_span: 2
+    cards:
+      - type: custom:mod-card
+        grid_options:
+          columns: full
+          rows: auto
+        card:
+          type: vertical-stack
+          cards:
+            - type: markdown
+              entity_id:
+                - device_tracker.middle_school_stopfinder
+                - sensor.middle_school_stopfinder_home_pickup
+                - sensor.middle_school_stopfinder_school_dropoff
+                - sensor.middle_school_stopfinder_school_pickup
+                - sensor.middle_school_stopfinder_home_dropoff
+                - sensor.middle_school_stopfinder_home_pickup_actual
+                - sensor.middle_school_stopfinder_school_dropoff_actual
+                - sensor.middle_school_stopfinder_school_pickup_actual
+                - sensor.middle_school_stopfinder_home_dropoff_actual
+              content: >
+                {% set dt = 'device_tracker.middle_school_stopfinder' %}
+
+                {% set invalid = ['unknown','unavailable','none','None',''] %}
+
+                {% set time_fmt = '%I:%M %p' %}
+
+
+                {% set active = state_attr(dt,'tracking_active') %}
+
+                {% set trip = state_attr(dt,'active_trip') %}
+
+                {% set am_bus = state_attr(dt,'morning_bus_number') %}
+
+                {% set pm_bus = state_attr(dt,'afternoon_bus_number') %}
+
+
+                {% set s_hp = states('sensor.middle_school_stopfinder_home_pickup') %}
+
+                {% set s_sd = states('sensor.middle_school_stopfinder_school_dropoff')
+                %}
+
+                {% set s_sp = states('sensor.middle_school_stopfinder_school_pickup')
+                %}
+
+                {% set s_hd = states('sensor.middle_school_stopfinder_home_dropoff') %}
+
+
+                {% set a_hp =
+                states('sensor.middle_school_stopfinder_home_pickup_actual') %}
+
+                {% set a_sd =
+                states('sensor.middle_school_stopfinder_school_dropoff_actual') %}
+
+                {% set a_sp =
+                states('sensor.middle_school_stopfinder_school_pickup_actual') %}
+
+                {% set a_hd =
+                states('sensor.middle_school_stopfinder_home_dropoff_actual') %}
+
+
+                {% macro fmt(s) -%}{% if s in invalid %}—{% else %}{{
+                (as_timestamp(s) | timestamp_custom(time_fmt)).lstrip('0') }}{%
+                endif %}{%- endmacro %}
+
+
+                {% macro delta(sc, ac) -%}
+
+                {%- if sc not in invalid and ac not in invalid -%}
+
+                {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) |
+                round(0) | int -%}
+
+                {%- if d == 0 -%}On time
+
+                {%- elif d > 0 -%}+{{ d }} min
+
+                {%- else -%}{{ d }} min
+
+                {%- endif -%}
+
+                {%- endif -%}
+
+                {%- endmacro %}
+
+
+                {% set hp_done =
+                  a_hp not in invalid and
+                  s_hp not in invalid and
+                  ((as_timestamp(a_hp) - as_timestamp(s_hp)) | abs) < 43200
+                %}
+
+
+                {% set sd_done =
+                  a_sd not in invalid and
+                  s_sd not in invalid and
+                  ((as_timestamp(a_sd) - as_timestamp(s_sd)) | abs) < 43200
+                %}
+
+
+                {% set sp_done =
+                  a_sp not in invalid and
+                  s_sp not in invalid and
+                  ((as_timestamp(a_sp) - as_timestamp(s_sp)) | abs) < 43200
+                %}
+
+
+                {% set hd_done =
+                  a_hd not in invalid and
+                  s_hd not in invalid and
+                  ((as_timestamp(a_hd) - as_timestamp(s_hd)) | abs) < 43200
+                %}
+
+
+                {% if states[dt] %}
+                  {% set age =
+                    (as_timestamp(now()) -
+                    as_timestamp(states[dt].last_updated)) | int
+                  %}
+
+                  {% if age < 60 %}
+                    {% set gps = '● Live · just now' %}
+                  {% elif age <= 120 %}
+                    {% set gps = '● Live · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% elif age <= 300 %}
+                    {% set gps = '● Updated · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% else %}
+                    {% set gps = '⚠ Stale · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% endif %}
+                {% else %}
+                  {% set gps = '⚠ Location unavailable' %}
+                {% endif %}
+
+
+                {% if active and trip == 'morning' %}
+
+                  {% set status = '🟢 MORNING ACTIVE' %}
+                  {% set bus = am_bus or '—' %}
+
+                  {% if not hp_done %}
+                    {% set label = 'NOW · Home Pickup' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hp) %}
+                    {% set previous = '' %}
+
+                  {% elif not sd_done %}
+                    {% set label = 'NOW · School Dropoff' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sd) %}
+                    {% set previous = 'Home pickup ' ~ fmt(a_hp) ~ ' · ' ~ delta(s_hp,a_hp) %}
+
+                  {% else %}
+                    {% set label = 'MORNING COMPLETE · School Dropoff' %}
+                    {% set icon = '✅' %}
+                    {% set event_time = fmt(a_sd) %}
+                    {% set previous = delta(s_sd,a_sd) %}
+                  {% endif %}
+
+                {% elif active and trip == 'afternoon' %}
+
+                  {% set status = '🟢 AFTERNOON ACTIVE' %}
+                  {% set bus = pm_bus or '—' %}
+
+                  {% if not sp_done %}
+                    {% set label = 'NOW · School Pickup' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sp) %}
+                    {% set previous = '' %}
+
+                  {% elif not hd_done %}
+                    {% set label = 'NOW · Home Dropoff' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hd) %}
+                    {% set previous = 'School pickup ' ~ fmt(a_sp) ~ ' · ' ~ delta(s_sp,a_sp) %}
+
+                  {% else %}
+                    {% set label = 'AFTERNOON COMPLETE · Home Dropoff' %}
+                    {% set icon = '✅' %}
+                    {% set event_time = fmt(a_hd) %}
+                    {% set previous = delta(s_hd,a_hd) %}
+                  {% endif %}
+
+                {% else %}
+
+                  {% set status = '⚪ NO ACTIVE TRIP' %}
+
+                  {% if am_bus and pm_bus and am_bus != pm_bus %}
+                    {% set bus = am_bus ~ ' / ' ~ pm_bus %}
+                  {% elif am_bus %}
+                    {% set bus = am_bus %}
+                  {% elif pm_bus %}
+                    {% set bus = pm_bus %}
+                  {% else %}
+                    {% set bus = '—' %}
+                  {% endif %}
+
+                  {% set now_ts = as_timestamp(now()) %}
+
+                  {% if s_hp not in invalid and as_timestamp(s_hp) > now_ts %}
+                    {% set label = 'NEXT · Home Pickup' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hp) %}
+                    {% set previous = '' %}
+
+                  {% elif s_sp not in invalid and as_timestamp(s_sp) > now_ts %}
+                    {% set label = 'NEXT · School Pickup' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sp) %}
+                    {% set previous = '' %}
+
+                  {% else %}
+                    {% set label = 'No More Trips Today' %}
+                    {% set icon = '🚌' %}
+                    {% set event_time = '—' %}
+                    {% set previous = '' %}
+                  {% endif %}
+
+                {% endif %}
+
+
+                ### 🚌 Middle School · Bus {{ bus }}
+
+
+                {{ status }} &nbsp;&nbsp; {{ gps }}
+
+
+                | **{{ label }}** | |
+
+                | :--- | ---: |
+
+                | {{ icon }} | **{{ event_time }}** |
+
+
+                {% if previous %}
+
+                *{{ previous }}*
+
+                {% endif %}
+            - type: map
+              aspect_ratio: '4:3'
+              hours_to_show: 0.25
+              default_zoom: 16
+              auto_fit: true
+              fit_zones: false
+              entities:
+                - entity: device_tracker.middle_school_stopfinder
+                  name: Middle School Bus
+                  label_mode: icon
+            - type: markdown
+              entity_id:
+                - sensor.middle_school_stopfinder_home_pickup
+                - sensor.middle_school_stopfinder_school_dropoff
+                - sensor.middle_school_stopfinder_school_pickup
+                - sensor.middle_school_stopfinder_home_dropoff
+                - sensor.middle_school_stopfinder_home_pickup_actual
+                - sensor.middle_school_stopfinder_school_dropoff_actual
+                - sensor.middle_school_stopfinder_school_pickup_actual
+                - sensor.middle_school_stopfinder_home_dropoff_actual
+              content: >
+                {%- set invalid = ['unknown','unavailable','none','None',''] -%}
+
+                {%- set time_fmt = '%I:%M %p' -%}
+
+
+                {%- macro fmt(s) -%}{%- if s in invalid -%}—{%- else -%}{{-
+                (as_timestamp(s) | timestamp_custom(time_fmt)).lstrip('0')
+                -}}{%- endif -%}{%- endmacro -%}
+
+
+                {%- macro result(sc, ac) -%}
+
+                {%- if ac in invalid or sc in invalid -%}—
+
+                {%- else -%}
+
+                {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) |
+                round(0) | int -%}
+
+                {{- fmt(ac) -}}
+
+                {%- if d == 0 -%} · On time
+
+                {%- elif d > 0 -%} · +{{ d }}m
+
+                {%- else -%} · {{ d }}m
+
+                {%- endif -%}
+
+                {%- endif -%}
+
+                {%- endmacro -%}
+
+
+                {%- set s_hp = states('sensor.middle_school_stopfinder_home_pickup')
+                -%}
+
+                {%- set s_sd = states('sensor.middle_school_stopfinder_school_dropoff')
+                -%}
+
+                {%- set s_sp = states('sensor.middle_school_stopfinder_school_pickup')
+                -%}
+
+                {%- set s_hd = states('sensor.middle_school_stopfinder_home_dropoff')
+                -%}
+
+
+                {%- set a_hp =
+                states('sensor.middle_school_stopfinder_home_pickup_actual') -%}
+
+                {%- set a_sd =
+                states('sensor.middle_school_stopfinder_school_dropoff_actual') -%}
+
+                {%- set a_sp =
+                states('sensor.middle_school_stopfinder_school_pickup_actual') -%}
+
+                {%- set a_hd =
+                states('sensor.middle_school_stopfinder_home_dropoff_actual') -%}
+
+
+                #### 🕐 Schedule
+
+
+                | Stop | Scheduled | Actual |
+
+                | :--- | :---: | :---: |
+
+                | 🏠 AM Pickup | {{ fmt(s_hp) }} | {{ result(s_hp,a_hp) }} |
+
+                | 🏫 AM Dropoff | {{ fmt(s_sd) }} | {{ result(s_sd,a_sd) }} |
+
+                | 🏫 PM Pickup | {{ fmt(s_sp) }} | {{ result(s_sp,a_sp) }} |
+
+                | 🏠 PM Dropoff | {{ fmt(s_hd) }} | {{ result(s_hd,a_hd) }} |
+            - type: markdown
+              entity_id:
+                - device_tracker.middle_school_stopfinder
+              content: |
+                {% set dt = 'device_tracker.middle_school_stopfinder' %}
+
+                {% set sn_hp =
+                  state_attr(dt,'home_pickup_stop_name') or '—'
+                %}
+
+                {% set sn_sd =
+                  state_attr(dt,'school_dropoff_stop_name') or '—'
+                %}
+
+                {% set sn_sp =
+                  state_attr(dt,'school_pickup_stop_name') or '—'
+                %}
+
+                {% set sn_hd =
+                  state_attr(dt,'home_dropoff_stop_name') or '—'
+                %}
+
+                #### Route
+
+                **☀️ Morning**  
+                🏠 {{ sn_hp }} → 🏫 {{ sn_sd }}
+
+                **🌇 Afternoon**  
+                🏫 {{ sn_sp }} → 🏠 {{ sn_hd }}
+        card_mod:
+          prepend: true
+          style: |
+            ha-card {
+              background: var(
+                --ha-card-background,
+                var(--card-background-color)
+              ) !important;
+
+              border-radius: 18px !important;
+              overflow: hidden !important;
+
+              border: {% if state_attr(
+                'device_tracker.middle_school_stopfinder',
+                'tracking_active'
+              ) %}2px solid var(--primary-color){% else %}1px solid var(
+                --ha-card-border-color,
+                var(--divider-color)
+              ){% endif %} !important;
+            }
+  - type: grid
+    column_span: 2
+    cards:
+      - type: custom:mod-card
+        grid_options:
+          columns: full
+          rows: auto
+        card:
+          type: vertical-stack
+          cards:
+            - type: markdown
+              entity_id:
+                - device_tracker.elementary_stopfinder
+                - sensor.elementary_stopfinder_home_pickup
+                - sensor.elementary_stopfinder_school_dropoff
+                - sensor.elementary_stopfinder_school_pickup
+                - sensor.elementary_stopfinder_home_dropoff
+                - sensor.elementary_stopfinder_home_pickup_actual
+                - sensor.elementary_stopfinder_school_dropoff_actual
+                - sensor.elementary_stopfinder_school_pickup_actual
+                - sensor.elementary_stopfinder_home_dropoff_actual
+              content: >
+                {% set dt = 'device_tracker.elementary_stopfinder' %}
+
+                {% set invalid = ['unknown','unavailable','none','None',''] %}
+
+                {% set time_fmt = '%I:%M %p' %}
+
+
+                {% set active = state_attr(dt,'tracking_active') %}
+
+                {% set trip = state_attr(dt,'active_trip') %}
+
+                {% set am_bus = state_attr(dt,'morning_bus_number') %}
+
+                {% set pm_bus = state_attr(dt,'afternoon_bus_number') %}
+
+
+                {% set s_hp = states('sensor.elementary_stopfinder_home_pickup')
+                %}
+
+                {% set s_sd =
+                states('sensor.elementary_stopfinder_school_dropoff') %}
+
+                {% set s_sp = states('sensor.elementary_stopfinder_school_pickup')
+                %}
+
+                {% set s_hd = states('sensor.elementary_stopfinder_home_dropoff')
+                %}
+
+
+                {% set a_hp =
+                states('sensor.elementary_stopfinder_home_pickup_actual') %}
+
+                {% set a_sd =
+                states('sensor.elementary_stopfinder_school_dropoff_actual') %}
+
+                {% set a_sp =
+                states('sensor.elementary_stopfinder_school_pickup_actual') %}
+
+                {% set a_hd =
+                states('sensor.elementary_stopfinder_home_dropoff_actual') %}
+
+
+                {% macro fmt(s) -%}{% if s in invalid %}—{% else %}{{
+                (as_timestamp(s) | timestamp_custom(time_fmt)).lstrip('0') }}{%
+                endif %}{%- endmacro %}
+
+
+                {% macro delta(sc, ac) -%}
+
+                {%- if sc not in invalid and ac not in invalid -%}
+
+                {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) |
+                round(0) | int -%}
+
+                {%- if d == 0 -%}On time
+
+                {%- elif d > 0 -%}+{{ d }} min
+
+                {%- else -%}{{ d }} min
+
+                {%- endif -%}
+
+                {%- endif -%}
+
+                {%- endmacro %}
+
+
+                {% set hp_done =
+                  a_hp not in invalid and
+                  s_hp not in invalid and
+                  ((as_timestamp(a_hp) - as_timestamp(s_hp)) | abs) < 43200
+                %}
+
+
+                {% set sd_done =
+                  a_sd not in invalid and
+                  s_sd not in invalid and
+                  ((as_timestamp(a_sd) - as_timestamp(s_sd)) | abs) < 43200
+                %}
+
+
+                {% set sp_done =
+                  a_sp not in invalid and
+                  s_sp not in invalid and
+                  ((as_timestamp(a_sp) - as_timestamp(s_sp)) | abs) < 43200
+                %}
+
+
+                {% set hd_done =
+                  a_hd not in invalid and
+                  s_hd not in invalid and
+                  ((as_timestamp(a_hd) - as_timestamp(s_hd)) | abs) < 43200
+                %}
+
+
+                {% if states[dt] %}
+                  {% set age =
+                    (as_timestamp(now()) -
+                    as_timestamp(states[dt].last_updated)) | int
+                  %}
+
+                  {% if age < 60 %}
+                    {% set gps = '● Live · just now' %}
+                  {% elif age <= 120 %}
+                    {% set gps = '● Live · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% elif age <= 300 %}
+                    {% set gps = '● Updated · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% else %}
+                    {% set gps = '⚠ Stale · ' ~ ((age / 60) | round(0) | int) ~ ' min ago' %}
+                  {% endif %}
+                {% else %}
+                  {% set gps = '⚠ Location unavailable' %}
+                {% endif %}
+
+
+                {% if active and trip == 'morning' %}
+
+                  {% set status = '🟢 MORNING ACTIVE' %}
+                  {% set bus = am_bus or '—' %}
+
+                  {% if not hp_done %}
+                    {% set label = 'NOW · Home Pickup' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hp) %}
+                    {% set previous = '' %}
+
+                  {% elif not sd_done %}
+                    {% set label = 'NOW · School Dropoff' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sd) %}
+                    {% set previous = 'Home pickup ' ~ fmt(a_hp) ~ ' · ' ~ delta(s_hp,a_hp) %}
+
+                  {% else %}
+                    {% set label = 'MORNING COMPLETE · School Dropoff' %}
+                    {% set icon = '✅' %}
+                    {% set event_time = fmt(a_sd) %}
+                    {% set previous = delta(s_sd,a_sd) %}
+                  {% endif %}
+
+                {% elif active and trip == 'afternoon' %}
+
+                  {% set status = '🟢 AFTERNOON ACTIVE' %}
+                  {% set bus = pm_bus or '—' %}
+
+                  {% if not sp_done %}
+                    {% set label = 'NOW · School Pickup' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sp) %}
+                    {% set previous = '' %}
+
+                  {% elif not hd_done %}
+                    {% set label = 'NOW · Home Dropoff' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hd) %}
+                    {% set previous = 'School pickup ' ~ fmt(a_sp) ~ ' · ' ~ delta(s_sp,a_sp) %}
+
+                  {% else %}
+                    {% set label = 'AFTERNOON COMPLETE · Home Dropoff' %}
+                    {% set icon = '✅' %}
+                    {% set event_time = fmt(a_hd) %}
+                    {% set previous = delta(s_hd,a_hd) %}
+                  {% endif %}
+
+                {% else %}
+
+                  {% set status = '⚪ NO ACTIVE TRIP' %}
+
+                  {% if am_bus and pm_bus and am_bus != pm_bus %}
+                    {% set bus = am_bus ~ ' / ' ~ pm_bus %}
+                  {% elif am_bus %}
+                    {% set bus = am_bus %}
+                  {% elif pm_bus %}
+                    {% set bus = pm_bus %}
+                  {% else %}
+                    {% set bus = '—' %}
+                  {% endif %}
+
+                  {% set now_ts = as_timestamp(now()) %}
+
+                  {% if s_hp not in invalid and as_timestamp(s_hp) > now_ts %}
+                    {% set label = 'NEXT · Home Pickup' %}
+                    {% set icon = '🏠' %}
+                    {% set event_time = fmt(s_hp) %}
+                    {% set previous = '' %}
+
+                  {% elif s_sp not in invalid and as_timestamp(s_sp) > now_ts %}
+                    {% set label = 'NEXT · School Pickup' %}
+                    {% set icon = '🏫' %}
+                    {% set event_time = fmt(s_sp) %}
+                    {% set previous = '' %}
+
+                  {% else %}
+                    {% set label = 'No More Trips Today' %}
+                    {% set icon = '🚌' %}
+                    {% set event_time = '—' %}
+                    {% set previous = '' %}
+                  {% endif %}
+
+                {% endif %}
+
+
+                ### 🚌 Elementary School · Bus {{ bus }}
+
+
+                {{ status }} &nbsp;&nbsp; {{ gps }}
+
+
+                | **{{ label }}** | |
+
+                | :--- | ---: |
+
+                | {{ icon }} | **{{ event_time }}** |
+
+
+                {% if previous %}
+
+                *{{ previous }}*
+
+                {% endif %}
+            - type: map
+              aspect_ratio: '4:3'
+              hours_to_show: 0.25
+              default_zoom: 16
+              auto_fit: true
+              fit_zones: false
+              entities:
+                - entity: device_tracker.elementary_stopfinder
+                  name: Elementary School Bus
+                  label_mode: icon
+            - type: markdown
+              entity_id:
+                - sensor.elementary_stopfinder_home_pickup
+                - sensor.elementary_stopfinder_school_dropoff
+                - sensor.elementary_stopfinder_school_pickup
+                - sensor.elementary_stopfinder_home_dropoff
+                - sensor.elementary_stopfinder_home_pickup_actual
+                - sensor.elementary_stopfinder_school_dropoff_actual
+                - sensor.elementary_stopfinder_school_pickup_actual
+                - sensor.elementary_stopfinder_home_dropoff_actual
+              content: >
+                {%- set invalid = ['unknown','unavailable','none','None',''] -%}
+
+                {%- set time_fmt = '%I:%M %p' -%}
+
+
+                {%- macro fmt(s) -%}{%- if s in invalid -%}—{%- else -%}{{-
+                (as_timestamp(s) | timestamp_custom(time_fmt)).lstrip('0')
+                -}}{%- endif -%}{%- endmacro -%}
+
+
+                {%- macro result(sc, ac) -%}
+
+                {%- if ac in invalid or sc in invalid -%}—
+
+                {%- else -%}
+
+                {%- set d = ((as_timestamp(ac) - as_timestamp(sc)) / 60) |
+                round(0) | int -%}
+
+                {{- fmt(ac) -}}
+
+                {%- if d == 0 -%} · On time
+
+                {%- elif d > 0 -%} · +{{ d }}m
+
+                {%- else -%} · {{ d }}m
+
+                {%- endif -%}
+
+                {%- endif -%}
+
+                {%- endmacro -%}
+
+
+                {%- set s_hp = states('sensor.elementary_stopfinder_home_pickup')
+                -%}
+
+                {%- set s_sd =
+                states('sensor.elementary_stopfinder_school_dropoff') -%}
+
+                {%- set s_sp =
+                states('sensor.elementary_stopfinder_school_pickup') -%}
+
+                {%- set s_hd = states('sensor.elementary_stopfinder_home_dropoff')
+                -%}
+
+
+                {%- set a_hp =
+                states('sensor.elementary_stopfinder_home_pickup_actual') -%}
+
+                {%- set a_sd =
+                states('sensor.elementary_stopfinder_school_dropoff_actual') -%}
+
+                {%- set a_sp =
+                states('sensor.elementary_stopfinder_school_pickup_actual') -%}
+
+                {%- set a_hd =
+                states('sensor.elementary_stopfinder_home_dropoff_actual') -%}
+
+
+                #### 🕐 Schedule
+
+
+                | Stop | Scheduled | Actual |
+
+                | :--- | :---: | :---: |
+
+                | 🏠 AM Pickup | {{ fmt(s_hp) }} | {{ result(s_hp,a_hp) }} |
+
+                | 🏫 AM Dropoff | {{ fmt(s_sd) }} | {{ result(s_sd,a_sd) }} |
+
+                | 🏫 PM Pickup | {{ fmt(s_sp) }} | {{ result(s_sp,a_sp) }} |
+
+                | 🏠 PM Dropoff | {{ fmt(s_hd) }} | {{ result(s_hd,a_hd) }} |
+            - type: markdown
+              entity_id:
+                - device_tracker.elementary_stopfinder
+              content: |
+                {% set dt = 'device_tracker.elementary_stopfinder' %}
+
+                {% set sn_hp =
+                  state_attr(dt,'home_pickup_stop_name') or '—'
+                %}
+
+                {% set sn_sd =
+                  state_attr(dt,'school_dropoff_stop_name') or '—'
+                %}
+
+                {% set sn_sp =
+                  state_attr(dt,'school_pickup_stop_name') or '—'
+                %}
+
+                {% set sn_hd =
+                  state_attr(dt,'home_dropoff_stop_name') or '—'
+                %}
+
+                #### Route
+
+                **☀️ Morning**  
+                🏠 {{ sn_hp }} → 🏫 {{ sn_sd }}
+
+                **🌇 Afternoon**  
+                🏫 {{ sn_sp }} → 🏠 {{ sn_hd }}
+        card_mod:
+          prepend: true
+          style: |
+            ha-card {
+              background: var(
+                --ha-card-background,
+                var(--card-background-color)
+              ) !important;
+
+              border-radius: 18px !important;
+              overflow: hidden !important;
+
+              border: {% if state_attr(
+                'device_tracker.elementary_stopfinder',
+                'tracking_active'
+              ) %}2px solid var(--primary-color){% else %}1px solid var(
+                --ha-card-border-color,
+                var(--divider-color)
+              ){% endif %} !important;
+            }
