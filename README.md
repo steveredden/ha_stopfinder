@@ -27,7 +27,7 @@ For bus `123`:
 
 Tracking windows come from the API schedule (`startTime`/`finishTime`).
 
-## Dashboard
+## Dashboards
 
 <!-- markdownlint-disable MD033 -->
 A starter dashboard YAML (map + schedule/actual tables) is at <a href="docs/dashboard-example1.yaml" target="_blank">docs/dashboard-example1.yaml</a>. Replace <code>BUS_NUMBER</code> and import via the HA Raw Configuration Editor.
