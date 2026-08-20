@@ -126,8 +126,17 @@ def _setup_stop_detection(
             last_stop = prev_stop.get(student_key)
             prev_stop[student_key] = current_stop
 
-            if current_stop and current_stop != last_stop:
-                actual_sensors = actual_sensors_all.get(student_key, {})
+            actual_sensors = actual_sensors_all.get(student_key, {})
+
+            # school_pickup is stamped on DEPARTURE (bus leaves school after boarding).
+            # All other stops are stamped on ARRIVAL.
+            if last_stop == "school_pickup" and current_stop != "school_pickup":
+                _LOGGER.debug(
+                    "Student %s departed stop school_pickup (trip=%s)",
+                    student_key, sd.active_trip,
+                )
+                _stamp(actual_sensors, "school_pickup", dt_util.now())
+            elif current_stop and current_stop != last_stop and current_stop != "school_pickup":
                 _LOGGER.debug(
                     "Student %s arrived at stop %s (trip=%s)",
                     student_key, current_stop, sd.active_trip,
