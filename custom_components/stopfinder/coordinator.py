@@ -190,6 +190,26 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                 return None
             return (float(lat), float(lon))
 
+        def _window(
+            start: datetime | None, finish: datetime | None,
+            pickup: datetime | None, dropoff: datetime | None,
+            before_min: int, after_min: int,
+        ) -> tuple[datetime | None, datetime | None]:
+            """Compute a tracking window that always encloses the actual stop times.
+
+            The vendor API's startTime/finishTime are meant to bracket the whole
+            route, but have been observed trailing behind (or leading) this
+            student's own pickUpTime/dropOffTime — e.g. an early-release trip
+            whose reported startTime is later than the student's pickup. Taking
+            the min/max against the stop times guarantees the window can never
+            exclude the trip it's supposed to be tracking.
+            """
+            starts = [t for t in (start, pickup) if t is not None]
+            ends   = [t for t in (finish, dropoff) if t is not None]
+            if not starts or not ends:
+                return None, None
+            return min(starts) - timedelta(minutes=before_min), max(ends) + timedelta(minutes=after_min)
+
         cfg = self.config_entry
         extra_before = int(
             cfg.options.get(CONF_MINUTES_BEFORE,
@@ -235,9 +255,9 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                     sd.school_dropoff_stop_name = t.get("dropOffStopName")
                     start  = _adjust(t.get("startTime"),  0)
                     finish = _adjust(t.get("finishTime"), 0)
-                    if start and finish:
-                        sd.morning_window_start = start  - timedelta(minutes=before_min)
-                        sd.morning_window_end   = finish + timedelta(minutes=after_min)
+                    sd.morning_window_start, sd.morning_window_end = _window(
+                        start, finish, sd.home_pickup, sd.school_dropoff, before_min, after_min,
+                    )
 
                 if from_school:
                     t = from_school[0]
@@ -250,9 +270,9 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
                     sd.home_dropoff_stop_name  = t.get("dropOffStopName")
                     start  = _adjust(t.get("startTime"),  0)
                     finish = _adjust(t.get("finishTime"), 0)
-                    if start and finish:
-                        sd.afternoon_window_start = start  - timedelta(minutes=before_min)
-                        sd.afternoon_window_end   = finish + timedelta(minutes=after_min)
+                    sd.afternoon_window_start, sd.afternoon_window_end = _window(
+                        start, finish, sd.school_pickup, sd.home_dropoff, before_min, after_min,
+                    )
 
         return students
 
