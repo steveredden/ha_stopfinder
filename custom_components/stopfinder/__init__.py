@@ -96,16 +96,28 @@ def _setup_stop_detection(
                 continue
 
             if sd.active_trip == "morning":
+                dropoff_key = "school_dropoff"
                 candidates = [
                     ("home_pickup",    sd.home_pickup_stop,    sd.home_pickup),
                     ("school_dropoff", sd.school_dropoff_stop, sd.school_dropoff),
                 ]
             elif sd.active_trip == "afternoon":
+                dropoff_key = "home_dropoff"
                 candidates = [
                     ("school_pickup", sd.school_pickup_stop, sd.school_pickup),
                     ("home_dropoff",  sd.home_dropoff_stop,  sd.home_dropoff),
                 ]
             else:
+                prev_stop[student_key] = None
+                continue
+
+            actual_sensors = actual_sensors_all.get(student_key, {})
+
+            # Trip already completed today (e.g. the bus finished early and is
+            # now revisiting stops on another route) — stop matching GPS to
+            # this trip's stops so a later pass through a stop's radius can't
+            # be mistaken for a new arrival/departure.
+            if _already_recorded(actual_sensors, dropoff_key, dt_util.now()):
                 prev_stop[student_key] = None
                 continue
 
@@ -125,8 +137,6 @@ def _setup_stop_detection(
 
             last_stop = prev_stop.get(student_key)
             prev_stop[student_key] = current_stop
-
-            actual_sensors = actual_sensors_all.get(student_key, {})
 
             # school_pickup is stamped on DEPARTURE (bus leaves school after boarding).
             # All other stops are stamped on ARRIVAL.
@@ -148,7 +158,18 @@ def _setup_stop_detection(
     )
 
 
+def _already_recorded(sensors: dict, key: str, now: datetime) -> bool:
+    """True if this stop's actual sensor already has today's timestamp."""
+    s = sensors.get(key)
+    val = s.native_value if s else None
+    return val is not None and val.date() == now.date()
+
+
 def _stamp(sensors: dict, key: str, ts: datetime) -> None:
+    # Guards against re-stamping a stop that GPS proximity re-triggers later
+    # in the day (e.g. the bus swings back past a stop on another route).
+    if _already_recorded(sensors, key, ts):
+        return
     s = sensors.get(key)
     if s:
         s.record_arrival(ts)

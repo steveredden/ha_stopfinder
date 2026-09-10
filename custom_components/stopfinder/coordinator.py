@@ -316,6 +316,21 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
 
         return False, None
 
+    @staticmethod
+    def _fetch_matches_date(fetched: StopfinderCoordinatorData, today: str) -> bool:
+        """False if any fetched student's own trip date isn't the day we asked for.
+
+        This undocumented API has been observed serving the next day's
+        schedule — evidently keyed off its own server clock rather than the
+        dateStart/dateEnd we send — once UTC has rolled past midnight while
+        it's still "today" locally (roughly 7pm-midnight Central).
+        """
+        for sd in fetched.values():
+            ref = sd.home_pickup or sd.school_dropoff or sd.school_pickup or sd.home_dropoff
+            if ref is not None and ref.date().isoformat() != today:
+                return False
+        return True
+
     # ------------------------------------------------------------------
     # Main update
     # ------------------------------------------------------------------
@@ -336,8 +351,24 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         try:
             if self._cached_students is None or self._cached_date != today or not in_window:
                 raw = await self._api_get(f"students?dateStart={today}&dateEnd={today}")
-                self._cached_students = self._parse_all_students(raw)
-                self._cached_date     = today
+                fetched = self._parse_all_students(raw)
+                if self._fetch_matches_date(fetched, today):
+                    self._cached_students = fetched
+                    self._cached_date     = today
+                elif self._cached_students is None:
+                    _LOGGER.warning(
+                        "Stopfinder API returned schedule data for a different "
+                        "day than %s and no prior cache exists; treating as no "
+                        "schedule until local midnight",
+                        today,
+                    )
+                    self._cached_students = {}
+                else:
+                    _LOGGER.warning(
+                        "Stopfinder API returned schedule data for a different "
+                        "day than %s; keeping previously cached schedule",
+                        today,
+                    )
         except Exception as err:
             raise UpdateFailed(f"Stopfinder schedule fetch error: {err}") from err
 
