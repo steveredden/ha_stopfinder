@@ -316,6 +316,42 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
 
         return False, None
 
+    def _reject_stale_fetch(
+        self, fetched: StopfinderCoordinatorData, today: str,
+    ) -> StopfinderCoordinatorData:
+        """Guard against the vendor API drifting to the next calendar day.
+
+        This undocumented API has been observed serving the next day's
+        schedule for a student — evidently keyed off its own server clock
+        rather than the dateStart/dateEnd we send — once UTC has rolled past
+        midnight while it's still "today" locally (roughly 7pm-midnight
+        Central). That silently overwrites a correct cached schedule with one
+        ~24h in the future. If a freshly-fetched student's own trip date
+        doesn't match what we asked for, keep serving their last known-good
+        cached entry instead.
+        """
+        cached = self._cached_students or {}
+        for key in list(fetched.keys()):
+            sd  = fetched[key]
+            ref = sd.home_pickup or sd.school_dropoff or sd.school_pickup or sd.home_dropoff
+            if ref is None or ref.date().isoformat() == today:
+                continue
+            if key in cached:
+                _LOGGER.warning(
+                    "Stopfinder API returned a %s trip date for student %s while "
+                    "fetching %s; keeping previously cached schedule",
+                    ref.date().isoformat(), key, today,
+                )
+                fetched[key] = cached[key]
+            else:
+                _LOGGER.warning(
+                    "Stopfinder API returned a %s trip date for student %s while "
+                    "fetching %s; discarding",
+                    ref.date().isoformat(), key, today,
+                )
+                del fetched[key]
+        return fetched
+
     # ------------------------------------------------------------------
     # Main update
     # ------------------------------------------------------------------
@@ -336,7 +372,8 @@ class StopfinderCoordinator(DataUpdateCoordinator[StopfinderCoordinatorData]):
         try:
             if self._cached_students is None or self._cached_date != today or not in_window:
                 raw = await self._api_get(f"students?dateStart={today}&dateEnd={today}")
-                self._cached_students = self._parse_all_students(raw)
+                fetched = self._parse_all_students(raw)
+                self._cached_students = self._reject_stale_fetch(fetched, today)
                 self._cached_date     = today
         except Exception as err:
             raise UpdateFailed(f"Stopfinder schedule fetch error: {err}") from err
